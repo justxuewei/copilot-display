@@ -196,13 +196,25 @@ async def push_image(
 
         logger.info("Connecting to %s", address)
 
-        async with BleakClient(address, timeout=20.0) as client:
-            if not client.is_connected:
-                raise RuntimeError(f"Failed to connect to {address}")
+        max_retries = 5
+        last_exc: Exception | None = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with BleakClient(address, timeout=30.0) as client:
+                    if not client.is_connected:
+                        raise RuntimeError(f"Failed to connect to {address}")
 
-            logger.info("Connected, starting transmission")
-            await _send_channel(client, TYPE_BLACK, black_data, on_progress)
-            await _send_channel(client, TYPE_RED, red_data, on_progress)
+                    logger.info("Connected on attempt %d, starting transmission", attempt)
+                    await _send_channel(client, TYPE_BLACK, black_data, on_progress)
+                    await _send_channel(client, TYPE_RED, red_data, on_progress)
+                break
+            except (TimeoutError, asyncio.TimeoutError, OSError) as e:
+                last_exc = e
+                logger.warning("Connection attempt %d/%d failed: %s", attempt, max_retries, e)
+                if attempt < max_retries:
+                    await asyncio.sleep(3.0)
+        else:
+            raise RuntimeError(f"Could not connect to {address} after {max_retries} attempts: {last_exc}")
 
         elapsed = time.monotonic() - start_time
         logger.info("Push complete in %.1fs", elapsed)
