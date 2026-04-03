@@ -34,6 +34,7 @@ _device_cache: dict[str, dict] = {}
 # Single lock for ALL BLE radio operations.
 # BlueZ cannot scan and connect concurrently — one lock prevents both races.
 _ble_lock = asyncio.Lock()
+_push_in_progress = False
 
 
 def image_to_channels(img: Image.Image) -> tuple[bytes, bytes]:
@@ -174,50 +175,57 @@ async def push_image(
     on_progress: callable | None = None,
 ) -> dict:
     """Push an image to the 4.2-inch e-ink display."""
-    if _ble_lock.locked():
-        raise RuntimeError("Another BLE operation is already in progress")
+    global _push_in_progress
 
+    if _push_in_progress:
+        raise RuntimeError("Another push is already in progress")
+
+    # Wait for the lock — background scan may be holding it briefly (up to ~10s)
     async with _ble_lock:
-        black_data, red_data = image_to_channels(img)
-        start_time = time.monotonic()
+        _push_in_progress = True
+        try:
+            black_data, red_data = image_to_channels(img)
+            start_time = time.monotonic()
 
-        # Resolve device address — scan inline if cache is empty (lock already held)
-        address = device_address
-        if not address:
-            devices = get_cached_devices()
-            if not devices:
-                logger.info("No cached devices, scanning...")
-                devices = await _do_scan(timeout=10.0)
-            if not devices:
-                raise RuntimeError("No BluTag devices found")
-            address = devices[0]["address"]
+            # Resolve device — scan inline if cache is empty (lock already held)
+            address = device_address
+            if not address:
+                devices = get_cached_devices()
+                if not devices:
+                    logger.info("No cached devices, scanning...")
+                    devices = await _do_scan(timeout=10.0)
+                if not devices:
+                    raise RuntimeError("No BluTag devices found")
+                address = devices[0]["address"]
 
-        logger.info("Connecting to %s", address)
+            logger.info("Connecting to %s", address)
 
-        max_retries = 5
-        last_exc: Exception | None = None
-        for attempt in range(1, max_retries + 1):
-            try:
-                async with BleakClient(address, timeout=30.0) as client:
-                    if not client.is_connected:
-                        raise RuntimeError(f"Failed to connect to {address}")
+            max_retries = 5
+            last_exc: Exception | None = None
+            for attempt in range(1, max_retries + 1):
+                try:
+                    async with BleakClient(address, timeout=30.0) as client:
+                        if not client.is_connected:
+                            raise RuntimeError(f"Failed to connect to {address}")
 
-                    logger.info("Connected on attempt %d, starting transmission", attempt)
-                    await _send_channel(client, TYPE_BLACK, black_data, on_progress)
-                    await _send_channel(client, TYPE_RED, red_data, on_progress)
-                break
-            except (TimeoutError, asyncio.TimeoutError, OSError) as e:
-                last_exc = e
-                logger.warning("Connection attempt %d/%d failed: %s", attempt, max_retries, e)
-                if attempt < max_retries:
-                    await asyncio.sleep(3.0)
-        else:
-            raise RuntimeError(f"Could not connect to {address} after {max_retries} attempts: {last_exc}")
+                        logger.info("Connected on attempt %d, starting transmission", attempt)
+                        await _send_channel(client, TYPE_BLACK, black_data, on_progress)
+                        await _send_channel(client, TYPE_RED, red_data, on_progress)
+                    break
+                except (TimeoutError, asyncio.TimeoutError, OSError) as e:
+                    last_exc = e
+                    logger.warning("Connection attempt %d/%d failed: %s", attempt, max_retries, e)
+                    if attempt < max_retries:
+                        await asyncio.sleep(3.0)
+            else:
+                raise RuntimeError(f"Could not connect to {address} after {max_retries} attempts: {last_exc}")
 
-        elapsed = time.monotonic() - start_time
-        logger.info("Push complete in %.1fs", elapsed)
-        return {
-            "status": "ok",
-            "device": address,
-            "duration_seconds": round(elapsed, 1),
-        }
+            elapsed = time.monotonic() - start_time
+            logger.info("Push complete in %.1fs", elapsed)
+            return {
+                "status": "ok",
+                "device": address,
+                "duration_seconds": round(elapsed, 1),
+            }
+        finally:
+            _push_in_progress = False
