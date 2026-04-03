@@ -1,0 +1,19 @@
+[project]
+name = "copilot-display"
+version = "0.1.0"
+description = "FastAPI server to push text to BluTag 4.2-inch e-ink displays over BLE"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+    "bleak>=0.22,<1.0",
+    "pillow>=10.0.0",
+    "pydantic-settings>=2.2.0",
+]
+
+[project.scripts]
+copilot-display = "copilot_display.server:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
