@@ -30,17 +30,14 @@ CHUNK_SIZE = 240
 
 # Device cache
 _device_cache: dict[str, dict] = {}
-_cache_lock = asyncio.Lock()
 
-# Push lock — only one BLE transmission at a time
-_push_lock = asyncio.Lock()
+# Single lock for ALL BLE radio operations.
+# BlueZ cannot scan and connect concurrently — one lock prevents both races.
+_ble_lock = asyncio.Lock()
 
 
 def image_to_channels(img: Image.Image) -> tuple[bytes, bytes]:
-    """Convert a PIL Image to black and red channel bytes for the 4.2" display.
-
-    Returns (black_bytes, red_bytes).
-    """
+    """Convert a PIL Image to black and red channel bytes for the 4.2" display."""
     img = img.convert("RGB").resize((SCREEN_W, SCREEN_H))
     pixels = img.load()
 
@@ -107,19 +104,15 @@ async def _send_channel(
     packets = _build_data_packets(channel_type, data)
     total = len(packets)
 
-    # Start
     await client.write_gatt_char(CHAR_UUID, _build_start(channel_type), response=False)
     await asyncio.sleep(3.0)
 
-    # Data packets
     for i, packet in enumerate(packets):
         await client.write_gatt_char(CHAR_UUID, packet, response=False)
-        delay = 1.0 if i < 10 else 0.6
-        await asyncio.sleep(delay)
+        await asyncio.sleep(1.0 if i < 10 else 0.6)
         if on_progress:
             on_progress(channel_name, i + 1, total)
 
-    # End
     await client.write_gatt_char(CHAR_UUID, _build_end(channel_type), response=False)
     await asyncio.sleep(0.1)
 
@@ -134,8 +127,8 @@ def _is_target_device(device: BLEDevice, adv: AdvertisementData) -> bool:
     return False
 
 
-async def scan_devices(timeout: float = 8.0) -> list[dict]:
-    """Scan for BluTag 4.2-inch devices."""
+async def _do_scan(timeout: float) -> list[dict]:
+    """Inner scan — caller must hold _ble_lock."""
     found: dict[str, dict] = {}
 
     def callback(device: BLEDevice, adv: AdvertisementData) -> None:
@@ -153,14 +146,22 @@ async def scan_devices(timeout: float = 8.0) -> list[dict]:
 
     devices = sorted(found.values(), key=lambda d: d.get("rssi") or -999, reverse=True)
 
-    # Update cache
-    async with _cache_lock:
-        _device_cache.clear()
-        for d in devices:
-            _device_cache[d["address"]] = d
+    _device_cache.clear()
+    for d in devices:
+        _device_cache[d["address"]] = d
 
     logger.info("Scan found %d device(s)", len(devices))
     return devices
+
+
+async def scan_devices(timeout: float = 8.0) -> list[dict]:
+    """Scan for BluTag devices. Skips silently if BLE radio is busy."""
+    if _ble_lock.locked():
+        logger.debug("BLE radio busy, skipping background scan")
+        return list(_device_cache.values())
+
+    async with _ble_lock:
+        return await _do_scan(timeout)
 
 
 def get_cached_devices() -> list[dict]:
@@ -172,24 +173,21 @@ async def push_image(
     device_address: str | None = None,
     on_progress: callable | None = None,
 ) -> dict:
-    """Push an image to the 4.2-inch e-ink display.
+    """Push an image to the 4.2-inch e-ink display."""
+    if _ble_lock.locked():
+        raise RuntimeError("Another BLE operation is already in progress")
 
-    Returns a dict with status and timing info.
-    """
-    if _push_lock.locked():
-        raise RuntimeError("Another push is already in progress")
-
-    async with _push_lock:
+    async with _ble_lock:
         black_data, red_data = image_to_channels(img)
         start_time = time.monotonic()
 
-        # Resolve device
+        # Resolve device address — scan inline if cache is empty (lock already held)
         address = device_address
         if not address:
             devices = get_cached_devices()
             if not devices:
                 logger.info("No cached devices, scanning...")
-                devices = await scan_devices(timeout=10.0)
+                devices = await _do_scan(timeout=10.0)
             if not devices:
                 raise RuntimeError("No BluTag devices found")
             address = devices[0]["address"]
