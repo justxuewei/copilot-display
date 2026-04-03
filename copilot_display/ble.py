@@ -152,6 +152,8 @@ async def _do_scan(timeout: float) -> list[dict]:
         _device_cache[d["address"]] = d
 
     logger.info("Scan found %d device(s)", len(devices))
+    for d in devices:
+        logger.info("  Device: %s  addr=%s  rssi=%s", d["name"], d["address"], d.get("rssi"))
     return devices
 
 
@@ -208,7 +210,7 @@ async def push_image(
                         if not client.is_connected:
                             raise RuntimeError(f"Failed to connect to {address}")
 
-                        logger.info("Connected on attempt %d, starting transmission", attempt)
+                        logger.info("Connected to %s (attempt %d), starting transmission", address, attempt)
                         await _send_channel(client, TYPE_BLACK, black_data, on_progress)
                         await _send_channel(client, TYPE_RED, red_data, on_progress)
                     break
