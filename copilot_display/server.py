@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from contextlib import asynccontextmanager
+from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -29,6 +31,10 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+# Task queue and state store
+_queue: asyncio.Queue = asyncio.Queue()
+_tasks: dict[str, dict[str, Any]] = {}
+
 
 async def _background_scan(interval: int) -> None:
     while True:
@@ -39,17 +45,35 @@ async def _background_scan(interval: int) -> None:
         await asyncio.sleep(interval)
 
 
+async def _queue_worker() -> None:
+    while True:
+        task_id, img, device = await _queue.get()
+        _tasks[task_id]["status"] = "in_progress"
+        logger.info("Processing task %s", task_id)
+        try:
+            result = await push_image(img, device_address=device)
+            _tasks[task_id].update({"status": "done", **result})
+        except Exception as e:
+            logger.exception("Task %s failed", task_id)
+            _tasks[task_id].update({"status": "failed", "error": str(e)})
+        finally:
+            _queue.task_done()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     logger.info("Starting copilot-display v%s", __version__)
-    task = asyncio.create_task(_background_scan(settings.scan_interval))
+    scan_task = asyncio.create_task(_background_scan(settings.scan_interval))
+    worker_task = asyncio.create_task(_queue_worker())
     yield
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    scan_task.cancel()
+    worker_task.cancel()
+    for t in (scan_task, worker_task):
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="copilot-display", version=__version__, lifespan=lifespan)
@@ -70,6 +94,7 @@ async def health():
         "status": "ok",
         "version": __version__,
         "devices": len(get_cached_devices()),
+        "queue_depth": _queue.qsize(),
     }
 
 
@@ -84,7 +109,7 @@ async def trigger_scan():
     return {"found": len(devices), "devices": devices}
 
 
-@app.post("/api/push")
+@app.post("/api/push", status_code=202)
 async def push_text(req: PushTextRequest):
     if not req.body.strip():
         raise HTTPException(status_code=400, detail="body must not be empty")
@@ -96,17 +121,20 @@ async def push_text(req: PushTextRequest):
         body_color=req.body_color,
     )
 
-    try:
-        result = await push_image(img, device_address=req.device)
-    except RuntimeError as e:
-        msg = str(e)
-        if "Another push" in msg:
-            raise HTTPException(status_code=409, detail=msg)
-        if "No BluTag" in msg:
-            raise HTTPException(status_code=404, detail=msg)
-        raise HTTPException(status_code=502, detail=msg)
+    task_id = str(uuid.uuid4())
+    _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
+    await _queue.put((task_id, img, req.device))
+    logger.info("Enqueued task %s (queue depth: %d)", task_id, _queue.qsize())
 
-    return result
+    return {"task_id": task_id, "status": "queued"}
+
+
+@app.get("/api/tasks/{task_id}")
+async def get_task(task_id: str):
+    task = _tasks.get(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"task_id": task_id, **task}
 
 
 def main():
