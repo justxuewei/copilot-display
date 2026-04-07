@@ -172,6 +172,12 @@ def get_cached_devices() -> list[dict]:
     return list(_device_cache.values())
 
 
+async def clear_display(device_address: str | None = None) -> dict:
+    """Send all-white image to clear the display."""
+    white = Image.new("RGB", (SCREEN_W, SCREEN_H), (255, 255, 255))
+    return await push_image(white, device_address=device_address)
+
+
 async def push_image(
     img: Image.Image,
     device_address: str | None = None,
@@ -180,7 +186,10 @@ async def push_image(
     """Push an image to the 4.2-inch e-ink display."""
     # Wait for the lock — background scan may be holding it briefly (up to ~10s)
     async with _ble_lock:
+        img.save("/tmp/copilot_display_last.png")
+        logger.info("Saved render to /tmp/copilot_display_last.png")
         black_data, red_data = image_to_channels(img)
+        logger.info("Encoded: black[0:4]=%s red[0:4]=%s", black_data[:4].hex(), red_data[:4].hex())
         start_time = time.monotonic()
 
         # Resolve device — scan inline if cache is empty (lock already held)
@@ -205,11 +214,11 @@ async def push_image(
                 try:
                     if not client.is_connected:
                         raise RuntimeError(f"Failed to connect to {address}")
+                    await asyncio.sleep(1.0)  # let GATT services settle
 
                     logger.info("Connected to %s (attempt %d), starting transmission", address, attempt)
                     await _send_channel(client, TYPE_BLACK, black_data, on_progress)
-                    # DEBUG: red channel disabled
-                    # await _send_channel(client, TYPE_RED, red_data, on_progress)
+                    await _send_channel(client, TYPE_RED, red_data, on_progress)
                 finally:
                     await client.disconnect()
                 break
