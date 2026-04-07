@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import sys
 import time
 
 from bleak import BleakClient, BleakScanner
@@ -29,8 +30,23 @@ TYPE_RED   = 0x12  # bit=1 → red
 SCREEN_W = 400
 SCREEN_H = 300
 
-# Max data bytes per BLE write (cc-usage-elink V2.1 protocol)
-CHUNK = 240
+# Platform-specific transmission parameters.
+#
+# macOS CoreBluetooth auto-negotiates a large ATT_MTU (~512 bytes), so 240-byte
+# chunks (244 bytes on the wire) fit fine and cc-usage-elink timing works.
+#
+# Linux BlueZ defaults to ATT_MTU=23. A 244-byte write silently truncates to 20
+# bytes (ATT_MTU − 3 for WoR), corrupting every packet → noise pixels.
+# bbtag uses 16-byte chunks at 100 ms (its confirmed-working 4.2-inch profile)
+# which stays safely within the 20-byte payload limit.
+if sys.platform == "linux":
+    CHUNK       = 16    # bbtag 4.2inch: LAYER_PAYLOAD_SIZE=16
+    _DELAY_MS   = 100   # bbtag 4.2inch: default_interval_ms=100
+    _DOUBLE_FIRST = True  # bbtag quirk: send first data packet twice
+else:
+    CHUNK       = 240   # cc-usage-elink V2.1
+    _DELAY_MS   = None  # use cc-usage-elink variable timing (1s/0.6s)
+    _DOUBLE_FIRST = False
 
 # Device cache
 _device_cache: dict[str, dict] = {}
@@ -98,7 +114,11 @@ async def _send_channel(
     data: bytes,
     on_progress: callable | None = None,
 ) -> None:
-    """Send one color channel (cc-usage-elink V2.1 timing)."""
+    """Send one color channel.
+
+    macOS: cc-usage-elink V2.1 timing (1s/0.6s, 240-byte chunks).
+    Linux: bbtag 4.2inch profile (100ms, 16-byte chunks, double first packet).
+    """
     name    = "black" if color_type == TYPE_BLACK else "red"
     packets = _build_data_packets(color_type, data)
     logger.info("Sending %s channel (%d bytes, %d packets)", name, len(data), len(packets))
@@ -106,9 +126,21 @@ async def _send_channel(
     await client.write_gatt_char(CHAR_UUID, _build_start(color_type), response=False)
     await asyncio.sleep(3.0)  # device init after start
 
+    first_sent = False
     for i, pkt in enumerate(packets):
         await client.write_gatt_char(CHAR_UUID, pkt, response=False)
-        await asyncio.sleep(1.0 if i < 10 else 0.6)
+
+        if _DOUBLE_FIRST and not first_sent:
+            delay = _DELAY_MS / 1000.0
+            await asyncio.sleep(delay)
+            await client.write_gatt_char(CHAR_UUID, pkt, response=False)  # bbtag: send first pkt twice
+            first_sent = True
+
+        if _DELAY_MS is not None:
+            await asyncio.sleep(_DELAY_MS / 1000.0)
+        else:
+            await asyncio.sleep(1.0 if i < 10 else 0.6)
+
         if on_progress:
             on_progress(name, i + 1, len(packets))
 
