@@ -82,11 +82,11 @@ def _build_end(channel_type: int) -> bytes:
     return bytes([channel_type, 0xFF, 0xFF])
 
 
-def _build_data_packets(channel_type: int, data: bytes) -> list[bytes]:
+def _build_data_packets(channel_type: int, data: bytes, chunk_size: int = CHUNK_SIZE) -> list[bytes]:
     packets = []
-    for i, offset in enumerate(range(0, len(data), CHUNK_SIZE)):
+    for i, offset in enumerate(range(0, len(data), chunk_size)):
         idx = i + 1  # 1-based packet index (NOT byte offset)
-        chunk = data[offset : offset + CHUNK_SIZE]
+        chunk = data[offset : offset + chunk_size]
         hi = (idx >> 8) & 0xFF
         lo = idx & 0xFF
         packets.append(bytes([channel_type, hi, lo, len(chunk)]) + chunk)
@@ -97,25 +97,26 @@ async def _send_channel(
     client: BleakClient,
     channel_type: int,
     data: bytes,
+    chunk_size: int,
     on_progress: callable | None = None,
 ) -> None:
     """Send one color channel to the device with required timing."""
     channel_name = "black" if channel_type == TYPE_BLACK else "red"
-    logger.info("Sending %s channel (%d bytes)", channel_name, len(data))
+    logger.info("Sending %s channel (%d bytes, chunk=%d)", channel_name, len(data), chunk_size)
 
-    packets = _build_data_packets(channel_type, data)
+    packets = _build_data_packets(channel_type, data, chunk_size)
     total = len(packets)
 
-    await client.write_gatt_char(CHAR_UUID, _build_start(channel_type), response=True)
+    await client.write_gatt_char(CHAR_UUID, _build_start(channel_type), response=False)
     await asyncio.sleep(3.0)
 
     for i, packet in enumerate(packets):
-        await client.write_gatt_char(CHAR_UUID, packet, response=True)
+        await client.write_gatt_char(CHAR_UUID, packet, response=False)
         await asyncio.sleep(1.0 if i < 10 else 0.6)
         if on_progress:
             on_progress(channel_name, i + 1, total)
 
-    await client.write_gatt_char(CHAR_UUID, _build_end(channel_type), response=True)
+    await client.write_gatt_char(CHAR_UUID, _build_end(channel_type), response=False)
     await asyncio.sleep(0.1)
 
     logger.info("Finished %s channel", channel_name)
@@ -216,12 +217,20 @@ async def push_image(
                         raise RuntimeError(f"Failed to connect to {address}")
                     await asyncio.sleep(1.0)  # let GATT services settle
 
+                    # Negotiate MTU — bleak on BlueZ doesn't do this automatically
+                    try:
+                        await client._backend._acquire_mtu()
+                    except Exception as e:
+                        logger.warning("MTU negotiation failed: %s", e)
+
+                    # ATT overhead=3, packet header=4 → max data per write = mtu - 7
+                    chunk_size = min(CHUNK_SIZE, client.mtu_size - 7)
                     logger.info(
-                        "Connected to %s (attempt %d), MTU=%s, starting transmission",
-                        address, attempt, client.mtu_size,
+                        "Connected to %s (attempt %d), MTU=%d, chunk_size=%d, starting transmission",
+                        address, attempt, client.mtu_size, chunk_size,
                     )
-                    await _send_channel(client, TYPE_BLACK, black_data, on_progress)
-                    await _send_channel(client, TYPE_RED, red_data, on_progress)
+                    await _send_channel(client, TYPE_BLACK, black_data, chunk_size, on_progress)
+                    await _send_channel(client, TYPE_RED, red_data, chunk_size, on_progress)
                 finally:
                     await client.disconnect()
                 break
