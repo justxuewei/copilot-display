@@ -124,6 +124,20 @@ def _is_target_device(device: BLEDevice, adv: AdvertisementData) -> bool:
     return False
 
 
+def _address_matches(device: BLEDevice, address: str) -> bool:
+    """Match a device against an address, handling macOS UUID vs MAC address formats.
+
+    On macOS CoreBluetooth assigns UUID addresses (e.g. 815CBCE6-A8CF-...) instead
+    of MAC addresses (e.g. FF:FF:42:00:11:1C). The device name encodes the last 4
+    bytes of the MAC: EDP-4200111C → MAC suffix 42:00:11:1C. We use that to match.
+    """
+    if device.address.upper() == address.upper():
+        return True
+    # MAC suffix match: last 4 bytes of MAC → 8 uppercase hex chars in name
+    mac_suffix = address.replace(":", "").upper()[-8:]
+    return bool(mac_suffix) and mac_suffix in (device.name or "").upper()
+
+
 async def _do_scan(timeout: float) -> list[dict]:
     """Inner scan — caller must hold _ble_lock."""
     found: dict[str, dict] = {}
@@ -183,7 +197,7 @@ async def _scan_and_connect(address: str | None, scan_timeout: float = 60.0) -> 
     ev = asyncio.Event()
 
     def on_detect(device: BLEDevice, adv: AdvertisementData) -> None:
-        if address and device.address != address:
+        if address and not _address_matches(device, address):
             return
         if not _is_target_device(device, adv):
             return
