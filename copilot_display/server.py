@@ -109,6 +109,17 @@ async def trigger_scan():
     return {"found": len(devices), "devices": devices}
 
 
+@app.post("/api/test/black", status_code=202)
+async def test_black(device: str | None = None):
+    """Send all-black image for display test."""
+    from PIL import Image as PILImage
+    img = PILImage.new("RGB", (400, 300), (0, 0, 0))
+    task_id = str(uuid.uuid4())
+    _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
+    await _queue.put((task_id, img, device))
+    return {"task_id": task_id, "status": "queued"}
+
+
 @app.post("/api/clear", status_code=202)
 async def clear_endpoint(device: str | None = None):
     """Send all-white image to clear the display."""

@@ -238,7 +238,10 @@ async def push_image(
             try:
                 session = await _open_session(address)
                 logger.info("Connected to %s (attempt %d)", address, attempt)
+                red_data = bytes(len(black_data))  # all-zeros: no red pixels
                 await _send_layer(session, TYPE_BLACK, black_data, on_progress)
+                await asyncio.sleep(0.1)
+                await _send_layer(session, TYPE_RED, red_data, on_progress)
                 await asyncio.sleep(SETTLE_MS / 1000.0)
                 break
             except (TimeoutError, asyncio.TimeoutError, OSError) as e:
