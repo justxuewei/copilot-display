@@ -106,16 +106,16 @@ async def _send_channel(
     packets = _build_data_packets(channel_type, data)
     total = len(packets)
 
-    await client.write_gatt_char(CHAR_UUID, _build_start(channel_type), response=False)
+    await client.write_gatt_char(CHAR_UUID, _build_start(channel_type), response=True)
     await asyncio.sleep(3.0)
 
     for i, packet in enumerate(packets):
-        await client.write_gatt_char(CHAR_UUID, packet, response=False)
+        await client.write_gatt_char(CHAR_UUID, packet, response=True)
         await asyncio.sleep(1.0 if i < 10 else 0.6)
         if on_progress:
             on_progress(channel_name, i + 1, total)
 
-    await client.write_gatt_char(CHAR_UUID, _build_end(channel_type), response=False)
+    await client.write_gatt_char(CHAR_UUID, _build_end(channel_type), response=True)
     await asyncio.sleep(0.1)
 
     logger.info("Finished %s channel", channel_name)
@@ -216,7 +216,10 @@ async def push_image(
                         raise RuntimeError(f"Failed to connect to {address}")
                     await asyncio.sleep(1.0)  # let GATT services settle
 
-                    logger.info("Connected to %s (attempt %d), starting transmission", address, attempt)
+                    logger.info(
+                        "Connected to %s (attempt %d), MTU=%s, starting transmission",
+                        address, attempt, client.mtu_size,
+                    )
                     await _send_channel(client, TYPE_BLACK, black_data, on_progress)
                     await _send_channel(client, TYPE_RED, red_data, on_progress)
                 finally:
