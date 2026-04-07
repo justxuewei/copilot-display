@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8420
     scan_interval: int = 60
+    device_address: str = "FF:FF:42:00:11:1C"
 
 
 settings = Settings()
@@ -117,7 +118,7 @@ async def clear_endpoint(device: str | None = None):
     white = PILImage.new("RGB", (SCREEN_W, SCREEN_H), (255, 255, 255))
     task_id = str(uuid.uuid4())
     _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
-    await _queue.put((task_id, white, device))
+    await _queue.put((task_id, white, device or settings.device_address or None))
     return {"task_id": task_id, "status": "queued"}
 
 
@@ -135,7 +136,7 @@ async def push_text(req: PushTextRequest):
 
     task_id = str(uuid.uuid4())
     _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
-    await _queue.put((task_id, img, req.device))
+    await _queue.put((task_id, img, req.device or settings.device_address or None))
     logger.info("Enqueued task %s (queue depth: %d)", task_id, _queue.qsize())
 
     return {"task_id": task_id, "status": "queued"}
