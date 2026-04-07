@@ -121,7 +121,6 @@ def render_text(
     """Render text to a 400x300 tri-color PIL Image."""
     img = Image.new("RGB", (SCREEN_W, SCREEN_H), COLOR_MAP["white"])
     draw = ImageDraw.Draw(img)
-    draw.fontmode = "1"  # no antialiasing
 
     tc = COLOR_MAP.get(title_color, COLOR_MAP["red"])
     bc = COLOR_MAP.get(body_color, COLOR_MAP["black"])

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import time
 
 from bleak import BleakClient, BleakScanner
@@ -38,7 +39,7 @@ _ble_lock = asyncio.Lock()
 
 def image_to_channels(img: Image.Image) -> tuple[bytes, bytes]:
     """Convert a PIL Image to black and red channel bytes for the 4.2" display."""
-    img = img.convert("RGB").resize((SCREEN_W, SCREEN_H))
+    img = img.convert("RGB").resize((SCREEN_W, SCREEN_H), Image.LANCZOS)
     pixels = img.load()
 
     black_data = bytearray()
@@ -46,11 +47,14 @@ def image_to_channels(img: Image.Image) -> tuple[bytes, bytes]:
 
     # Scan bottom-to-top
     for y in range(SCREEN_H - 1, -1, -1):
-        for x_byte in range(SCREEN_W // 8):
+        for x_byte in range(math.ceil(SCREEN_W / 8)):
             black_byte = 0
             red_byte = 0
             for bit in range(8):
                 x = x_byte * 8 + bit
+                if x >= SCREEN_W:
+                    black_byte |= 1 << (7 - bit)  # pad with white
+                    continue
                 r, g, b = pixels[x, y]
 
                 is_red = r > 150 and g < 100 and b < 100
