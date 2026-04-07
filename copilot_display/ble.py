@@ -26,8 +26,9 @@ TYPE_RED = 0x12
 SCREEN_W = 400
 SCREEN_H = 300
 
-# Max payload per BLE data packet
-CHUNK_SIZE = 240
+# Max payload per BLE data packet (bbtag layer protocol uses 16 for EDP- devices)
+LAYER_PAYLOAD_SIZE = 16
+DELAY_MS = 100
 
 # Device cache
 _device_cache: dict[str, dict] = {}
@@ -74,50 +75,43 @@ def image_to_channels(img: Image.Image) -> tuple[bytes, bytes]:
     return bytes(black_data), bytes(red_data)
 
 
-def _build_start(channel_type: int) -> bytes:
-    return bytes([channel_type, 0x00, 0x00])
-
-
-def _build_end(channel_type: int) -> bytes:
-    return bytes([channel_type, 0xFF, 0xFF])
-
-
-def _build_data_packets(channel_type: int, data: bytes, chunk_size: int = CHUNK_SIZE) -> list[bytes]:
-    packets = []
-    for i, offset in enumerate(range(0, len(data), chunk_size)):
-        idx = i + 1  # 1-based packet index (NOT byte offset)
-        chunk = data[offset : offset + chunk_size]
-        hi = (idx >> 8) & 0xFF
-        lo = idx & 0xFF
-        packets.append(bytes([channel_type, hi, lo, len(chunk)]) + chunk)
-    return packets
-
-
 async def _send_channel(
     client: BleakClient,
     channel_type: int,
     data: bytes,
-    chunk_size: int,
     on_progress: callable | None = None,
 ) -> None:
-    """Send one color channel to the device with required timing."""
+    """Send one color channel using the bbtag EDP- layer protocol."""
     channel_name = "black" if channel_type == TYPE_BLACK else "red"
-    logger.info("Sending %s channel (%d bytes, chunk=%d)", channel_name, len(data), chunk_size)
+    delay = DELAY_MS / 1000.0
+    total_packets = math.ceil(len(data) / LAYER_PAYLOAD_SIZE)
+    logger.info("Sending %s channel (%d bytes, %d packets)", channel_name, len(data), total_packets)
 
-    packets = _build_data_packets(channel_type, data, chunk_size)
-    total = len(packets)
+    # Start packet: [type, 0x00, 0x00, 0x00, 0x00]
+    await client.write_gatt_char(CHAR_UUID, bytes([channel_type, 0x00, 0x00, 0x00, 0x00]), response=False)
+    await asyncio.sleep(delay)
+    await asyncio.sleep(1.0)  # extra settle after start
 
-    await client.write_gatt_char(CHAR_UUID, _build_start(channel_type), response=False)
-    await asyncio.sleep(3.0)
-
-    for i, packet in enumerate(packets):
+    first_sent = False
+    packet_index = 1
+    offset = 0
+    while offset < len(data):
+        chunk = data[offset : offset + LAYER_PAYLOAD_SIZE]
+        packet = bytes([channel_type, packet_index & 0xFF, len(chunk)]) + chunk
         await client.write_gatt_char(CHAR_UUID, packet, response=False)
-        await asyncio.sleep(1.0 if i < 10 else 0.6)
+        if not first_sent:
+            await asyncio.sleep(delay)
+            await client.write_gatt_char(CHAR_UUID, packet, response=False)  # send first pkt twice
+            first_sent = True
+        await asyncio.sleep(delay)
         if on_progress:
-            on_progress(channel_name, i + 1, total)
+            on_progress(channel_name, packet_index, total_packets)
+        offset += len(chunk)
+        packet_index += 1
 
-    await client.write_gatt_char(CHAR_UUID, _build_end(channel_type), response=False)
-    await asyncio.sleep(0.1)
+    # End packet: [type, 0xFF, 0xFF, 0xFF, 0xFF]
+    await client.write_gatt_char(CHAR_UUID, bytes([channel_type, 0xFF, 0xFF, 0xFF, 0xFF]), response=False)
+    await asyncio.sleep(delay)
 
     logger.info("Finished %s channel", channel_name)
 
@@ -223,14 +217,12 @@ async def push_image(
                     except Exception as e:
                         logger.warning("MTU negotiation failed: %s", e)
 
-                    # ATT overhead=3, packet header=4 → max data per write = mtu - 7
-                    chunk_size = min(CHUNK_SIZE, client.mtu_size - 7)
                     logger.info(
-                        "Connected to %s (attempt %d), MTU=%d, chunk_size=%d, starting transmission",
-                        address, attempt, client.mtu_size, chunk_size,
+                        "Connected to %s (attempt %d), MTU=%d, starting transmission",
+                        address, attempt, client.mtu_size,
                     )
-                    await _send_channel(client, TYPE_BLACK, black_data, chunk_size, on_progress)
-                    await _send_channel(client, TYPE_RED, red_data, chunk_size, on_progress)
+                    await _send_channel(client, TYPE_BLACK, black_data, on_progress)
+                    await _send_channel(client, TYPE_RED, red_data, on_progress)
                 finally:
                     await client.disconnect()
                 break
