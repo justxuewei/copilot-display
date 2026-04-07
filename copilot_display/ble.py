@@ -243,9 +243,16 @@ async def _find_and_connect(address: str | None, scan_timeout: float = 60.0) -> 
         best_device.name, best_device.address, best_rssi,
     )
 
-    # On Linux/BlueZ, use the address string rather than the BLEDevice object.
-    # After a connect() timeout BlueZ leaves a stale connection entry; calling
-    # disconnect() explicitly clears it before retrying.
+    # macOS CoreBluetooth: keep scanner alive — peripheral ref is lost on stop.
+    # Linux BlueZ: stop scanner before connecting — BlueZ cannot scan and
+    # connect concurrently; attempting both yields InProgress errors.
+    if sys.platform == "linux":
+        await scanner.stop()
+        scanner_alive = False
+    else:
+        scanner_alive = True
+
+    # On Linux, use the address string — more reliable with BlueZ D-Bus.
     device_ref = best_device.address if sys.platform == "linux" else best_device
 
     for attempt in range(8):
@@ -253,7 +260,8 @@ async def _find_and_connect(address: str | None, scan_timeout: float = 60.0) -> 
         client = BleakClient(device_ref, timeout=30.0)
         try:
             await client.connect()
-            await scanner.stop()
+            if scanner_alive:
+                await scanner.stop()
             return client
         except Exception as e:
             logger.warning("Connect attempt %d/8 failed: %s", attempt + 1, e)
@@ -264,7 +272,8 @@ async def _find_and_connect(address: str | None, scan_timeout: float = 60.0) -> 
             if attempt < 7:
                 await asyncio.sleep(2.0)  # give BlueZ time to recover
 
-    await scanner.stop()
+    if scanner_alive:
+        await scanner.stop()
     raise RuntimeError(f"Could not connect to {best_device.address} after 8 attempts")
 
 
