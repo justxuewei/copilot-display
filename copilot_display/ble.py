@@ -243,17 +243,26 @@ async def _find_and_connect(address: str | None, scan_timeout: float = 60.0) -> 
         best_device.name, best_device.address, best_rssi,
     )
 
+    # On Linux/BlueZ, use the address string rather than the BLEDevice object.
+    # After a connect() timeout BlueZ leaves a stale connection entry; calling
+    # disconnect() explicitly clears it before retrying.
+    device_ref = best_device.address if sys.platform == "linux" else best_device
+
     for attempt in range(8):
         await asyncio.sleep(0.3)
-        client = BleakClient(best_device, timeout=30.0)
+        client = BleakClient(device_ref, timeout=30.0)
         try:
             await client.connect()
             await scanner.stop()
             return client
         except Exception as e:
             logger.warning("Connect attempt %d/8 failed: %s", attempt + 1, e)
+            try:
+                await client.disconnect()  # clear stale BlueZ state
+            except Exception:
+                pass
             if attempt < 7:
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(2.0)  # give BlueZ time to recover
 
     await scanner.stop()
     raise RuntimeError(f"Could not connect to {best_device.address} after 8 attempts")
