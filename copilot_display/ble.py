@@ -42,7 +42,7 @@ SCREEN_H = 300
 if sys.platform == "linux":
     CHUNK       = 16    # bbtag 4.2inch: LAYER_PAYLOAD_SIZE=16
     _DELAY_MS   = 100   # bbtag 4.2inch: default_interval_ms=100
-    _DOUBLE_FIRST = True  # bbtag quirk: send first data packet twice
+    _DOUBLE_FIRST = False  # this device appends sequentially; double-first shifts image by CHUNK bytes
 else:
     CHUNK       = 240   # cc-usage-elink V2.1
     _DELAY_MS   = None  # use cc-usage-elink variable timing (1s/0.6s)
