@@ -8,13 +8,17 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 
+import io
+
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, Response
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from copilot_display import __version__
+from copilot_display import __version__, templates
 from copilot_display.ble import clear_display, get_cached_devices, push_image, scan_devices
-from copilot_display.models import PushTextRequest
+from copilot_display.models import PushTemplateRequest, PushTextRequest
+from copilot_display.ui import UI_HTML
 from copilot_display.render import render_text
 
 logger = logging.getLogger("copilot_display")
@@ -139,6 +143,65 @@ async def push_text(req: PushTextRequest):
     await _queue.put((task_id, img, req.device or settings.device_address or None))
     logger.info("Enqueued task %s (queue depth: %d)", task_id, _queue.qsize())
 
+    return {"task_id": task_id, "status": "queued"}
+
+
+@app.get("/ui", response_class=HTMLResponse, include_in_schema=False)
+async def ui_page():
+    """Interactive template preview and control UI."""
+    return UI_HTML
+
+
+@app.post("/api/preview/template")
+async def preview_template(req: PushTemplateRequest):
+    """Render a template and return the result as a PNG image (no display push)."""
+    tmpl = templates.get(req.template)
+    if tmpl is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown template '{req.template}'. Available: {templates.list_names()}",
+        )
+
+    try:
+        img = tmpl.render(req.data)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=f"Template data error: {exc}") from exc
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
+@app.get("/api/templates")
+async def list_templates():
+    """List all available template names."""
+    return {"templates": templates.list_names()}
+
+
+@app.post("/api/push/template", status_code=202)
+async def push_template(req: PushTemplateRequest):
+    """Render a named template with the supplied data and push to the display."""
+    tmpl = templates.get(req.template)
+    if tmpl is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown template '{req.template}'. Available: {templates.list_names()}",
+        )
+
+    try:
+        img = tmpl.render(req.data)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=f"Template data error: {exc}") from exc
+
+    task_id = str(uuid.uuid4())
+    _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
+    await _queue.put((task_id, img, req.device or settings.device_address or None))
+    logger.info(
+        "Enqueued template task %s (template=%s, queue depth: %d)",
+        task_id,
+        req.template,
+        _queue.qsize(),
+    )
     return {"task_id": task_id, "status": "queued"}
 
 
