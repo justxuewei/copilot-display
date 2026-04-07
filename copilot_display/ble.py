@@ -44,28 +44,13 @@ _ble_lock = asyncio.Lock()
 
 # ── Image encoding ────────────────────────────────────────────────────────────
 
-def image_to_channels(img: Image.Image) -> tuple[bytes, bytes]:
-    """Convert PIL Image to black and red layer bytes (bbtag layer_to_bytes_rowwise)."""
+def image_to_black_channel(img: Image.Image) -> bytes:
+    """Convert PIL Image to black channel bytes (bbtag layer_to_bytes_rowwise)."""
     img = img.convert("RGB").resize((SCREEN_W, SCREEN_H), Image.LANCZOS)
-    rgb = np.array(img, dtype=np.uint8)
-
-    # Red detection: R>150, G<100, B<100
-    is_red = (
-        (rgb[:, :, 0] > 150) &
-        (rgb[:, :, 1] < 100) &
-        (rgb[:, :, 2] < 100)
-    )
-
-    # Black detection: luminance < 128, not red
-    gray = rgb.mean(axis=2)
-    is_black = (gray < 128) & ~is_red
-
-    # black_layer: 1 = NOT black (white/red), 0 = black  (bit=1 → white in protocol)
-    black_layer = (~is_black).astype(np.uint8)
-    # red_layer:   1 = red                                (bit=1 → red in protocol)
-    red_layer   = is_red.astype(np.uint8)
-
-    return _layer_to_bytes(black_layer), _layer_to_bytes(red_layer)
+    gray = np.array(img, dtype=np.uint8).mean(axis=2)
+    # black_layer: 1 = light (white), 0 = dark (black) — bit=1 → white in protocol
+    black_layer = (gray >= 128).astype(np.uint8)
+    return _layer_to_bytes(black_layer)
 
 
 def _layer_to_bytes(layer: np.ndarray) -> bytes:
@@ -229,11 +214,8 @@ async def push_image(
         img.save("/tmp/copilot_display_last.png")
         logger.info("Saved render to /tmp/copilot_display_last.png")
 
-        black_data, red_data = image_to_channels(img)
-        logger.info(
-            "Encoded: black[0:4]=%s red[0:4]=%s total=%d bytes/channel",
-            black_data[:4].hex(), red_data[:4].hex(), len(black_data),
-        )
+        black_data = image_to_black_channel(img)
+        logger.info("Encoded: black[0:4]=%s total=%d bytes", black_data[:4].hex(), len(black_data))
         start_time = time.monotonic()
 
         # Resolve address
@@ -257,8 +239,6 @@ async def push_image(
                 session = await _open_session(address)
                 logger.info("Connected to %s (attempt %d)", address, attempt)
                 await _send_layer(session, TYPE_BLACK, black_data, on_progress)
-                await asyncio.sleep(0.1)
-                await _send_layer(session, TYPE_RED,   red_data,   on_progress)
                 await asyncio.sleep(SETTLE_MS / 1000.0)
                 break
             except (TimeoutError, asyncio.TimeoutError, OSError) as e:
