@@ -50,7 +50,7 @@ def _find_font_path() -> str | None:
     return None
 
 
-def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     path = _find_font_path()
     if path:
         return ImageFont.truetype(path, size)
@@ -68,7 +68,7 @@ def _is_cjk(ch: str) -> bool:
     )
 
 
-def _wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
+def wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
     """Wrap text to fit within max_width pixels. CJK-aware."""
     lines: list[str] = []
     for paragraph in text.split("\n"):
@@ -90,7 +90,7 @@ def _wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFon
     return lines
 
 
-def _fit_text(
+def fit_text(
     draw: ImageDraw.ImageDraw,
     text: str,
     max_width: int,
@@ -100,15 +100,15 @@ def _fit_text(
 ) -> tuple[ImageFont.FreeTypeFont, list[str]]:
     """Find the largest font size where text fits in the given area."""
     for size in range(size_max, size_min - 1, -1):
-        font = _load_font(size)
-        wrapped = _wrap_text(draw, text, font, max_width)
+        font = load_font(size)
+        wrapped = wrap_text(draw, text, font, max_width)
         line_h = draw.textbbox((0, 0), "Ag", font=font)[3]
         total_h = line_h * len(wrapped)
         if total_h <= max_height:
             return font, wrapped
     # Use minimum size regardless
-    font = _load_font(size_min)
-    wrapped = _wrap_text(draw, text, font, max_width)
+    font = load_font(size_min)
+    wrapped = wrap_text(draw, text, font, max_width)
     return font, wrapped
 
 
@@ -131,7 +131,7 @@ def render_text(
     if title:
         # Reserve up to 40% of height for title
         title_max_h = int((SCREEN_H - 2 * PADDING_Y) * 0.35)
-        title_font, title_lines = _fit_text(
+        title_font, title_lines = fit_text(
             draw, title, usable_w, title_max_h, TITLE_SIZE_MAX, TITLE_SIZE_MIN
         )
         line_h = draw.textbbox((0, 0), "Ag", font=title_font)[3]
@@ -147,7 +147,7 @@ def render_text(
 
     # Body
     body_max_h = SCREEN_H - y - PADDING_Y
-    body_font, body_lines = _fit_text(
+    body_font, body_lines = fit_text(
         draw, body, usable_w, body_max_h, BODY_SIZE_MAX, BODY_SIZE_MIN
     )
     line_h = draw.textbbox((0, 0), "Ag", font=body_font)[3]

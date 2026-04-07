@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -8,6 +10,12 @@ class PushTextRequest(BaseModel):
     title: str | None = None
     title_color: str = "red"
     body_color: str = "black"
+    device: str | None = None
+
+
+class PushTemplateRequest(BaseModel):
+    template: str
+    data: dict[str, Any]
     device: str | None = None
 
 
