@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 import time
 
 import numpy as np
@@ -32,8 +33,12 @@ SCREEN_H = 300
 
 # Transmission parameters (from bbtag 2.13inch profile)
 LAYER_PAYLOAD_SIZE = 16   # bytes per data packet
-DELAY_MS           = 100  # ms between packets
 SETTLE_MS          = 1500 # ms to wait after both channels are sent
+
+# BlueZ (Linux) queues write-without-response through D-Bus asynchronously;
+# its internal queue overflows at 100ms, causing silent packet drops → noise.
+# CoreBluetooth (macOS) handles this fine at 100ms.
+DELAY_MS = 200 if sys.platform == "linux" else 100
 
 # Device cache
 _device_cache: dict[str, dict] = {}
