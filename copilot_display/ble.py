@@ -153,51 +153,83 @@ async def _do_scan(timeout: float) -> list[dict]:
     return devices
 
 
-async def _scan_and_connect(address: str | None, scan_timeout: float = 15.0) -> BleakClient:
-    """Scan for a device and connect while the scanner is still running.
+async def _scan_and_connect(address: str | None, scan_timeout: float = 60.0) -> BleakClient:
+    """Connect to a device, keeping the scanner alive until connect() returns.
 
-    CoreBluetooth (macOS) loses the peripheral reference as soon as the scanner
-    stops, so connecting after stop always raises BleakDeviceNotFoundError.
-    Keeping the scanner alive until connect() returns fixes this.
+    Strategy (mirrors cc-usage-elink find_and_connect):
+    1. Fast path: if address is known, try direct connect first — CoreBluetooth
+       can reconnect by address without scanning if the peripheral is cached.
+    2. Scan path: start scanner, wait for device to advertise, then connect
+       while the scanner is still running so CoreBluetooth retains the
+       peripheral reference.
     """
-    found: BLEDevice | None = None
+    # ── Fast path: direct connect by address (no scan needed) ────────────────
+    if address:
+        logger.info("Trying direct connect to %s", address)
+        for attempt in range(3):
+            try:
+                client = BleakClient(address, timeout=10.0)
+                await client.connect()
+                logger.info("Direct connect succeeded (attempt %d)", attempt + 1)
+                return client
+            except Exception as e:
+                logger.debug("Direct connect attempt %d failed: %s", attempt + 1, e)
+                if attempt < 2:
+                    await asyncio.sleep(0.5)
+        logger.info("Direct connect failed, falling back to scan")
+
+    # ── Scan path ─────────────────────────────────────────────────────────────
+    candidates: dict[str, tuple] = {}  # address -> (BLEDevice, rssi)
     ev = asyncio.Event()
 
     def on_detect(device: BLEDevice, adv: AdvertisementData) -> None:
-        nonlocal found
-        if address:
-            if device.address == address:
-                found = device
-                ev.set()
-        elif _is_target_device(device, adv):
-            found = device
-            ev.set()
+        if address and device.address != address:
+            return
+        if not _is_target_device(device, adv):
+            return
+        rssi = adv.rssi if adv.rssi is not None else -100
+        prev = candidates.get(device.address)
+        if prev is None or rssi > prev[1]:
+            candidates[device.address] = (device, rssi)
+        ev.set()
 
     scanner = BleakScanner(detection_callback=on_detect)
     await scanner.start()
     try:
         try:
-            await asyncio.wait_for(ev.wait(), timeout=scan_timeout)
+            await asyncio.wait_for(asyncio.shield(ev.wait()), timeout=scan_timeout)
+            await asyncio.sleep(3.0)  # wait for more candidates / stronger signal
         except asyncio.TimeoutError:
             raise RuntimeError(
                 f"Device {address or '(any EDP)'} not found after {scan_timeout:.0f}s"
             )
 
-        _device_cache[found.address] = {"name": found.name or "Unknown", "address": found.address}
-        logger.info("Found %s (%s), connecting while scanner is alive", found.name, found.address)
+        best_device, best_rssi = max(candidates.values(), key=lambda x: x[1])
+        _device_cache[best_device.address] = {
+            "name": best_device.name or "Unknown",
+            "address": best_device.address,
+        }
+        logger.info(
+            "Found %s (%s) RSSI=%d, connecting while scanner is alive",
+            best_device.name, best_device.address, best_rssi,
+        )
 
+        # Connect with scanner still running — CoreBluetooth needs live peripheral ref
         last_exc: Exception | None = None
-        for attempt in range(1, 4):
+        for attempt in range(8):
+            await asyncio.sleep(0.3)
             try:
-                client = BleakClient(found, timeout=30.0)
+                client = BleakClient(best_device, timeout=30.0)
                 await client.connect()
                 return client
             except Exception as e:
                 last_exc = e
-                logger.warning("Connect attempt %d/3 failed: %s", attempt, e)
-                if attempt < 3:
+                logger.warning("Connect attempt %d/8 failed: %s", attempt + 1, e)
+                if attempt < 7:
                     await asyncio.sleep(1.0)
-        raise RuntimeError(f"Could not connect to {found.address} after 3 attempts: {last_exc}")
+        raise RuntimeError(
+            f"Could not connect to {best_device.address} after 8 attempts: {last_exc}"
+        )
     finally:
         await scanner.stop()
 
