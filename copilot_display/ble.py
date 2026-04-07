@@ -238,7 +238,7 @@ async def push_image(
             try:
                 session = await _open_session(address)
                 logger.info("Connected to %s (attempt %d)", address, attempt)
-                red_data = bytes(len(black_data))  # all-zeros: no red pixels
+                red_data = bytes([0xFF] * len(black_data))  # all-ones: no red (inverted polarity)
                 await _send_layer(session, TYPE_BLACK, black_data, on_progress)
                 await asyncio.sleep(0.1)
                 await _send_layer(session, TYPE_RED, red_data, on_progress)
