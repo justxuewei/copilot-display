@@ -84,14 +84,12 @@ def _build_end(channel_type: int) -> bytes:
 
 def _build_data_packets(channel_type: int, data: bytes) -> list[bytes]:
     packets = []
-    offset = 0
-    while offset < len(data):
+    for i, offset in enumerate(range(0, len(data), CHUNK_SIZE)):
+        idx = i + 1  # 1-based packet index (NOT byte offset)
         chunk = data[offset : offset + CHUNK_SIZE]
-        hi = (offset >> 8) & 0xFF
-        lo = offset & 0xFF
-        packet = bytes([channel_type, hi, lo, len(chunk)]) + chunk
-        packets.append(packet)
-        offset += len(chunk)
+        hi = (idx >> 8) & 0xFF
+        lo = idx & 0xFF
+        packets.append(bytes([channel_type, hi, lo, len(chunk)]) + chunk)
     return packets
 
 
@@ -202,13 +200,18 @@ async def push_image(
         last_exc: Exception | None = None
         for attempt in range(1, max_retries + 1):
             try:
-                async with BleakClient(address, timeout=30.0) as client:
+                client = BleakClient(address, timeout=30.0)
+                await client.connect()
+                try:
                     if not client.is_connected:
                         raise RuntimeError(f"Failed to connect to {address}")
 
                     logger.info("Connected to %s (attempt %d), starting transmission", address, attempt)
                     await _send_channel(client, TYPE_BLACK, black_data, on_progress)
-                    await _send_channel(client, TYPE_RED, red_data, on_progress)
+                    # DEBUG: red channel disabled
+                    # await _send_channel(client, TYPE_RED, red_data, on_progress)
+                finally:
+                    await client.disconnect()
                 break
             except (TimeoutError, asyncio.TimeoutError, OSError) as e:
                 last_exc = e
