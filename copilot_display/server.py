@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from copilot_display import __version__
-from copilot_display.ble import clear_display, get_cached_devices, push_image, scan_devices
+from copilot_display.ble import get_cached_devices, push_image, scan_devices
 from copilot_display.models import PushTextRequest
 from copilot_display.render import render_text
 
@@ -113,8 +113,7 @@ async def trigger_scan():
 async def clear_endpoint(device: str | None = None):
     """Send all-white image to clear the display."""
     from PIL import Image as PILImage
-    from copilot_display.ble import SCREEN_H, SCREEN_W
-    white = PILImage.new("RGB", (SCREEN_W, SCREEN_H), (255, 255, 255))
+    white = PILImage.new("RGB", (400, 300), (255, 255, 255))
     task_id = str(uuid.uuid4())
     _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
     await _queue.put((task_id, white, device))
