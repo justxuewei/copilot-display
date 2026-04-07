@@ -901,15 +901,21 @@ document.querySelectorAll('.nav-item').forEach(item => {
 // ═══════════════════════════════════════════════════════════════════════════
 // Template definitions & form builder
 // ═══════════════════════════════════════════════════════════════════════════
+// Per-template JSON examples shown in the textarea fallback
+const TMPL_EXAMPLES = {
+  stock: JSON.stringify({
+    stocks: [
+      { symbol: "AAPL",  price: 189.30, change:  1.20, change_pct:  0.64 },
+      { symbol: "TSLA",  price: 242.50, change: -3.10, change_pct: -1.26 },
+      { symbol: "GOOGL", price: 175.80, change:  0.45, change_pct:  0.26 },
+      { symbol: "MSFT",  price: 420.12, change: -2.30, change_pct: -0.54 },
+      { symbol: "AMZN",  price: 178.45, change:  0.85, change_pct:  0.48 },
+    ],
+    updated_at: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+  }, null, 2),
+};
+
 const TMPL_FIELDS = {
-  stock: [
-    { key: 'symbol',      label: 'Symbol',    type: 'text',   placeholder: 'AAPL',   required: true },
-    { key: 'price',       label: 'Price',     type: 'number', placeholder: '189.30', required: true, step: '0.01' },
-    { key: 'change',      label: 'Change',    type: 'number', placeholder: '+1.20',  step: '0.01' },
-    { key: 'change_pct',  label: 'Change %',  type: 'number', placeholder: '+0.64',  step: '0.01' },
-    { key: 'currency',    label: 'Currency',  type: 'text',   placeholder: 'USD' },
-    { key: 'label',       label: 'Label',     type: 'text',   placeholder: 'NASDAQ' },
-  ],
   text: [
     { key: 'title',       label: 'Title',       type: 'text',     placeholder: 'Hello' },
     { key: 'body',        label: 'Body',        type: 'textarea', placeholder: 'Body text…', required: true },
@@ -924,8 +930,12 @@ function buildForm(name) {
 
   const fields = TMPL_FIELDS[name];
   if (!fields) {
-    // Fallback: raw JSON textarea for unknown templates
-    const wrap = makeField('Data (JSON)', 'raw-json', 'textarea', '{}');
+    // Fallback: raw JSON textarea, pre-populated with example if available
+    const example = TMPL_EXAMPLES[name] || '{}';
+    const wrap = makeField('Data (JSON)', 'raw-json', 'textarea', '');
+    const ta = wrap.querySelector('textarea');
+    ta.value = example;
+    ta.style.minHeight = '220px';
     container.appendChild(wrap);
     return;
   }
