@@ -137,8 +137,7 @@ def render_text(
         line_h = draw.textbbox((0, 0), "Ag", font=title_font)[3]
         for line in title_lines:
             bbox = draw.textbbox((0, 0), line, font=title_font)
-            lw = bbox[2] - bbox[0]
-            x = PADDING_X + (usable_w - lw) // 2  # centered
+            x = PADDING_X + usable_w // 2 - (bbox[0] + bbox[2]) // 2
             draw.text((x, y), line, fill=tc, font=title_font)
             y += line_h
         # Separator line
