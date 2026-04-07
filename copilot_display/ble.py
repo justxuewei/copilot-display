@@ -153,6 +153,55 @@ async def _do_scan(timeout: float) -> list[dict]:
     return devices
 
 
+async def _scan_and_connect(address: str | None, scan_timeout: float = 15.0) -> BleakClient:
+    """Scan for a device and connect while the scanner is still running.
+
+    CoreBluetooth (macOS) loses the peripheral reference as soon as the scanner
+    stops, so connecting after stop always raises BleakDeviceNotFoundError.
+    Keeping the scanner alive until connect() returns fixes this.
+    """
+    found: BLEDevice | None = None
+    ev = asyncio.Event()
+
+    def on_detect(device: BLEDevice, adv: AdvertisementData) -> None:
+        nonlocal found
+        if address:
+            if device.address == address:
+                found = device
+                ev.set()
+        elif _is_target_device(device, adv):
+            found = device
+            ev.set()
+
+    scanner = BleakScanner(detection_callback=on_detect)
+    await scanner.start()
+    try:
+        try:
+            await asyncio.wait_for(ev.wait(), timeout=scan_timeout)
+        except asyncio.TimeoutError:
+            raise RuntimeError(
+                f"Device {address or '(any EDP)'} not found after {scan_timeout:.0f}s"
+            )
+
+        _device_cache[found.address] = {"name": found.name or "Unknown", "address": found.address}
+        logger.info("Found %s (%s), connecting while scanner is alive", found.name, found.address)
+
+        last_exc: Exception | None = None
+        for attempt in range(1, 4):
+            try:
+                client = BleakClient(found, timeout=30.0)
+                await client.connect()
+                return client
+            except Exception as e:
+                last_exc = e
+                logger.warning("Connect attempt %d/3 failed: %s", attempt, e)
+                if attempt < 3:
+                    await asyncio.sleep(1.0)
+        raise RuntimeError(f"Could not connect to {found.address} after 3 attempts: {last_exc}")
+    finally:
+        await scanner.stop()
+
+
 async def scan_devices(timeout: float = 8.0) -> list[dict]:
     """Scan for BluTag devices. Skips silently if BLE radio is busy."""
     if _ble_lock.locked():
@@ -187,52 +236,23 @@ async def push_image(
         logger.info("Encoded: black[0:4]=%s red[0:4]=%s", black_data[:4].hex(), red_data[:4].hex())
         start_time = time.monotonic()
 
-        # Resolve device — scan inline if cache is empty (lock already held)
-        address = device_address
-        if not address:
-            devices = get_cached_devices()
-            if not devices:
-                logger.info("No cached devices, scanning...")
-                devices = await _do_scan(timeout=10.0)
-            if not devices:
-                raise RuntimeError("No BluTag devices found")
-            address = devices[0]["address"]
+        # _scan_and_connect keeps the scanner alive until connect() returns,
+        # which is required on CoreBluetooth (macOS) to retain the peripheral ref.
+        client = await _scan_and_connect(device_address)
+        try:
+            await asyncio.sleep(1.0)  # let GATT services settle
 
-        logger.info("Connecting to %s", address)
-
-        max_retries = 5
-        last_exc: Exception | None = None
-        for attempt in range(1, max_retries + 1):
+            # Negotiate MTU — bleak on BlueZ doesn't do this automatically
             try:
-                client = BleakClient(address, timeout=30.0)
-                await client.connect()
-                try:
-                    if not client.is_connected:
-                        raise RuntimeError(f"Failed to connect to {address}")
-                    await asyncio.sleep(1.0)  # let GATT services settle
+                await client._backend._acquire_mtu()
+            except Exception as e:
+                logger.warning("MTU negotiation failed: %s", e)
 
-                    # Negotiate MTU — bleak on BlueZ doesn't do this automatically
-                    try:
-                        await client._backend._acquire_mtu()
-                    except Exception as e:
-                        logger.warning("MTU negotiation failed: %s", e)
-
-                    logger.info(
-                        "Connected to %s (attempt %d), MTU=%d, starting transmission",
-                        address, attempt, client.mtu_size,
-                    )
-                    await _send_channel(client, TYPE_BLACK, black_data, on_progress)
-                    await _send_channel(client, TYPE_RED, red_data, on_progress)
-                finally:
-                    await client.disconnect()
-                break
-            except (TimeoutError, asyncio.TimeoutError, OSError) as e:
-                last_exc = e
-                logger.warning("Connection attempt %d/%d failed: %s", attempt, max_retries, e)
-                if attempt < max_retries:
-                    await asyncio.sleep(3.0)
-        else:
-            raise RuntimeError(f"Could not connect to {address} after {max_retries} attempts: {last_exc}")
+            logger.info("Connected, MTU=%d, starting transmission", client.mtu_size)
+            await _send_channel(client, TYPE_BLACK, black_data, on_progress)
+            await _send_channel(client, TYPE_RED, red_data, on_progress)
+        finally:
+            await client.disconnect()
 
         elapsed = time.monotonic() - start_time
         logger.info("Push complete in %.1fs", elapsed)
