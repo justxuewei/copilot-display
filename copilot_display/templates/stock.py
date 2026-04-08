@@ -123,9 +123,24 @@ def _fetch_one(sym: str) -> dict | None:
             "regularMarketPreviousClose"
         )
 
-        change_pct = None
-        if prev_close and prev_close != 0:
+        # Use the session-specific change percent from yfinance when available,
+        # so PRE shows only the pre-market move, POST shows only the post-market
+        # move, and REGULAR shows the intraday move from previous close.
+        raw_pct: float | None = None
+        if market_state == "PRE" and pre_price:
+            raw_pct = info.get("preMarketChangePercent")
+        elif market_state in ("POST", "POSTPOST", "CLOSED") and post_price:
+            raw_pct = info.get("postMarketChangePercent")
+        else:
+            raw_pct = info.get("regularMarketChangePercent")
+
+        if raw_pct is not None:
+            # yfinance returns a decimal fraction (e.g. 0.0075 = 0.75%)
+            change_pct = round(float(raw_pct) * 100, 2)
+        elif prev_close and prev_close != 0:
             change_pct = round((price - prev_close) / prev_close * 100, 2)
+        else:
+            change_pct = None
 
         display_name = _DISPLAY_NAMES.get(sym, sym)
 
