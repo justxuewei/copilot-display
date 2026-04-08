@@ -147,7 +147,7 @@ async def push_text(req: PushTextRequest):
     return {"task_id": task_id, "status": "queued"}
 
 
-@app.get("/ui", response_class=HTMLResponse, include_in_schema=False)
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def ui_page():
     """Interactive template preview and control UI."""
     return UI_HTML
