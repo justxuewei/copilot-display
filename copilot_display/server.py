@@ -47,13 +47,36 @@ store = DataStore(settings.data_dir)
 _queue: asyncio.Queue = asyncio.Queue()
 _tasks: dict[str, dict[str, Any]] = {}
 _last_refresh: datetime | None = None
+_last_scan:    datetime | None = None
+
+
+def _load_timestamps() -> None:
+    global _last_refresh, _last_scan
+    state = store.load_state()
+    for key, var in (("last_refresh", "_last_refresh"), ("last_scan", "_last_scan")):
+        val = state.get(key)
+        if val:
+            try:
+                globals()[var] = datetime.fromisoformat(val)
+            except ValueError:
+                pass
+
+
+def _save_timestamps() -> None:
+    store.save_state({
+        "last_refresh": _last_refresh.isoformat() if _last_refresh else None,
+        "last_scan":    _last_scan.isoformat()    if _last_scan    else None,
+    })
 
 
 async def _background_scan(interval: int) -> None:
+    global _last_scan
     while True:
         try:
             await scan_devices(timeout=8.0)
             store.save_devices(get_cached_devices())
+            _last_scan = datetime.now()
+            _save_timestamps()
         except Exception:
             logger.exception("Background scan failed")
         await asyncio.sleep(interval)
@@ -115,6 +138,7 @@ async def _do_refresh() -> None:
     _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
     await _queue.put((task_id, img, device))
     _last_refresh = datetime.now()
+    _save_timestamps()
     logger.info("Enqueued refresh task %s (template=%s)", task_id, template_name)
 
 
@@ -132,6 +156,7 @@ async def lifespan(app: FastAPI):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     logger.info("Starting copilot-display v%s", __version__)
     set_cached_devices(store.load_devices())
+    _load_timestamps()
     config = store.load_config()
     logger.info("Config: %s", config)
     scan_interval = config.get("scan_interval", settings.scan_interval)
