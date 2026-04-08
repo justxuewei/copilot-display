@@ -1629,7 +1629,7 @@ document.getElementById('btn-save-config').addEventListener('click', async () =>
     const res = await api('/api/config', { method: 'PATCH', body: JSON.stringify(updates) });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? res.statusText);
     _savedConfig = await res.json();
-    note.textContent = 'Saved. Restart server to apply scheduling changes.';
+    note.textContent = 'Saved.';
     note.className = 'config-note ok';
   } catch (e) {
     note.textContent = e.message;
