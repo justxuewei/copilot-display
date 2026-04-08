@@ -39,7 +39,7 @@ html, body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
@@ -247,7 +247,7 @@ html, body {
   border-radius: var(--radius);
   padding: 7px 9px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text);
   outline: none;
   width: 100%;
@@ -732,7 +732,7 @@ html, body {
   <nav class="sidebar">
     <span class="nav-section-label">Sections</span>
     <div class="nav-item active" data-target="preview">
-      <span class="nav-icon">▤</span>Preview
+      <span class="nav-icon">▤</span>Template
     </div>
     <div class="nav-item" data-target="devices">
       <span class="nav-icon">◈</span>Devices
