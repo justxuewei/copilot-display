@@ -1631,6 +1631,7 @@ document.getElementById('btn-save-config').addEventListener('click', async () =>
     _savedConfig = await res.json();
     note.textContent = 'Saved.';
     note.className = 'config-note ok';
+    loadRefreshStatus();
   } catch (e) {
     note.textContent = e.message;
     note.className = 'config-note err';
