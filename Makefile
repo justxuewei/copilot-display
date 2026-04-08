@@ -1,4 +1,4 @@
-.PHONY: install run clean docker-build docker-push
+.PHONY: install run clean docker-build docker-push tag
 
 VENV := .venv
 PYTHON := $(VENV)/bin/python
@@ -25,3 +25,13 @@ docker-build:
 
 docker-push: docker-build
 	docker push $(DOCKER_IMAGE):$(VERSION)
+
+tag:
+	$(eval TAG := $(filter-out $@,$(MAKECMDGOALS)))
+	$(if $(TAG),,$(error Usage: make tag <version>))
+	git tag $(TAG)
+	git push origin $(TAG)
+	$(MAKE) docker-push VERSION=$(TAG)
+
+%:
+	@:
