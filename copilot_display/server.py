@@ -6,6 +6,7 @@ import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, time as dt_time
 from typing import Any
 
 import io
@@ -72,6 +73,64 @@ async def _queue_worker() -> None:
             _queue.task_done()
 
 
+def _is_work_time(config: dict) -> bool:
+    now = datetime.now()
+    work_days = config.get("work_days", [])
+    if work_days and now.weekday() not in work_days:
+        return False
+    work_start = config.get("work_start", "")
+    work_end   = config.get("work_end",   "")
+    if work_start and work_end:
+        def _t(s): h, m = s.split(":"); return dt_time(int(h), int(m))
+        if not (_t(work_start) <= now.time() <= _t(work_end)):
+            return False
+    return True
+
+
+async def _do_refresh() -> None:
+    config = store.load_config()
+    if not _is_work_time(config):
+        logger.info("Refresh skipped: outside work hours/days")
+        return
+
+    template_name = config.get("template", "")
+    if not template_name:
+        logger.info("Refresh skipped: no template configured")
+        return
+
+    tmpl = templates.get(template_name)
+    if tmpl is None:
+        logger.warning("Refresh skipped: unknown template '%s'", template_name)
+        return
+
+    template_data = config.get("template_data", {})
+
+    if template_name == "stock":
+        symbols = [template_data.get(f"sym{i}") for i in range(1, 5)]
+        symbols = [s for s in symbols if s] or DEFAULT_SYMBOLS
+        logger.info("Refresh: fetching live quotes for %s", symbols)
+        loop = asyncio.get_running_loop()
+        data = await loop.run_in_executor(None, fetch_quotes, symbols)
+        img = tmpl.render(data)
+    else:
+        img = tmpl.render(template_data)
+
+    device = settings.device_address or None
+    task_id = str(uuid.uuid4())
+    _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
+    await _queue.put((task_id, img, device))
+    logger.info("Enqueued refresh task %s (template=%s)", task_id, template_name)
+
+
+async def _background_refresh(interval: int) -> None:
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await _do_refresh()
+        except Exception:
+            logger.exception("Background refresh failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -86,11 +145,18 @@ async def lifespan(app: FastAPI):
         scan_task = asyncio.create_task(_background_scan(scan_interval))
     else:
         logger.info("Background BLE scan disabled (scan_interval=0)")
+    refresh_interval = config.get("refresh_interval", 0)
+    refresh_task = None
+    if refresh_interval > 0:
+        refresh_task = asyncio.create_task(_background_refresh(refresh_interval))
+        logger.info("Background refresh enabled (interval=%ds)", refresh_interval)
+    else:
+        logger.info("Background refresh disabled (refresh_interval=0)")
     yield
-    if scan_task is not None:
-        scan_task.cancel()
+    for t in filter(None, (scan_task, refresh_task)):
+        t.cancel()
     worker_task.cancel()
-    for t in filter(None, (scan_task, worker_task)):
+    for t in filter(None, (scan_task, refresh_task, worker_task)):
         try:
             await t
         except asyncio.CancelledError:
