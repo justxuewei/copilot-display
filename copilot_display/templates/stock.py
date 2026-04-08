@@ -135,8 +135,8 @@ def _fetch_one(sym: str) -> dict | None:
             raw_pct = info.get("regularMarketChangePercent")
 
         if raw_pct is not None:
-            # yfinance returns a decimal fraction (e.g. 0.0075 = 0.75%)
-            change_pct = round(float(raw_pct) * 100, 2)
+            # yfinance returns the value already as a percentage (e.g. 0.75 = 0.75%)
+            change_pct = round(float(raw_pct), 2)
         elif prev_close and prev_close != 0:
             change_pct = round((price - prev_close) / prev_close * 100, 2)
         else:
