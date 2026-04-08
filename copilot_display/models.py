@@ -19,6 +19,11 @@ class PushTemplateRequest(BaseModel):
     device: str | None = None
 
 
+class PushStocksRequest(BaseModel):
+    symbols: list[str] | None = None  # up to 4 ticker codes
+    device: str | None = None
+
+
 class DeviceInfo(BaseModel):
     name: str
     address: str

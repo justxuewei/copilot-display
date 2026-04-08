@@ -903,15 +903,6 @@ document.querySelectorAll('.nav-item').forEach(item => {
 // ═══════════════════════════════════════════════════════════════════════════
 // Per-template JSON examples shown in the textarea fallback
 const TMPL_EXAMPLES = {
-  stock: JSON.stringify({
-    stocks: [
-      { symbol: "AAPL",  low: 185.00, price:   189.30, high:   195.00, change_pct:  0.75 },
-      { symbol: "TSLA",  low: 238.10, price:   242.50, high:   251.80, change_pct: -1.26 },
-      { symbol: "GOOGL", low: 172.40, price:   175.80, high:   178.20, change_pct:  0.26 },
-      { symbol: "MSFT",  low: 415.30, price:   420.12, high:   424.00, change_pct: -0.54 },
-    ],
-    updated_at: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
-  }, null, 2),
 };
 
 const TMPL_FIELDS = {
@@ -921,11 +912,21 @@ const TMPL_FIELDS = {
     { key: 'title_color', label: 'Title color', type: 'select',   options: ['red','black'],   default: 'red' },
     { key: 'body_color',  label: 'Body color',  type: 'select',   options: ['black','red'],   default: 'black' },
   ],
+  stock: [
+    { key: 'sym1', label: 'Ticker 1', type: 'text', placeholder: '^IXIC',  default: '^IXIC' },
+    { key: 'sym2', label: 'Ticker 2', type: 'text', placeholder: '^GSPC',  default: '^GSPC' },
+    { key: 'sym3', label: 'Ticker 3', type: 'text', placeholder: 'GC=F',   default: 'GC=F' },
+    { key: 'sym4', label: 'Ticker 4', type: 'text', placeholder: 'BZ=F',   default: 'BZ=F' },
+  ],
 };
 
 function buildForm(name) {
   const container = document.getElementById('tmpl-fields');
   container.innerHTML = '';
+
+  // Update preview button label based on template
+  const previewBtn = document.getElementById('btn-preview');
+  previewBtn.textContent = (name === 'stock') ? 'Fetch & Preview' : 'Preview';
 
   const fields = TMPL_FIELDS[name];
   if (!fields) {
@@ -936,6 +937,20 @@ function buildForm(name) {
     ta.value = example;
     ta.style.minHeight = '220px';
     container.appendChild(wrap);
+    return;
+  }
+
+  // For stock template, render as a 2x2 grid
+  if (name === 'stock') {
+    const grid = document.createElement('div');
+    grid.className = 'two-col';
+    fields.forEach(f => {
+      const wrap = makeField(f.label, 'f_' + f.key, f.type, f.placeholder || '', f.required, f.step);
+      const input = wrap.querySelector('input');
+      if (f.default) input.value = f.default;
+      grid.appendChild(wrap);
+    });
+    container.appendChild(grid);
     return;
   }
 
@@ -1056,41 +1071,76 @@ async function loadDeviceDropdown() {
 // ═══════════════════════════════════════════════════════════════════════════
 document.getElementById('btn-preview').addEventListener('click', async () => {
   const name = document.getElementById('tmpl-select').value;
-  let data;
-  try { data = collectData(name); }
-  catch (e) { showError('Invalid JSON: ' + e.message); return; }
+  const isStock = (name === 'stock');
 
   hideError();
   const btn = document.getElementById('btn-preview');
   btn.disabled = true;
-  btn.textContent = '…';
+  btn.textContent = isStock ? 'Fetching…' : '…';
 
   try {
-    const res = await api('/api/preview/template', {
-      method: 'POST',
-      body: JSON.stringify({ template: name, data }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail ?? res.statusText);
+    let previewRes;
+
+    if (isStock) {
+      // Collect ticker symbols from inputs
+      const symbols = ['sym1','sym2','sym3','sym4']
+        .map(k => (document.getElementById('f_' + k)?.value || '').trim())
+        .filter(Boolean);
+      if (!symbols.length) throw new Error('Enter at least one ticker symbol');
+
+      // Fetch live data via /api/preview/stocks
+      const fetchRes = await api('/api/preview/stocks', {
+        method: 'POST',
+        body: JSON.stringify({ symbols }),
+      });
+      if (!fetchRes.ok) {
+        const err = await fetchRes.json().catch(() => ({ detail: fetchRes.statusText }));
+        throw new Error(err.detail ?? fetchRes.statusText);
+      }
+      const blob = await fetchRes.blob();
+      const url  = URL.createObjectURL(blob);
+
+      const screen = document.getElementById('eink-screen');
+      screen.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = url;
+      screen.appendChild(img);
+
+      // Store for push — use the stocks endpoint
+      lastPreviewPayload = { _stockPush: true, symbols };
+      document.getElementById('btn-push').disabled = false;
+      setChip('', 'ready to push');
+    } else {
+      let data;
+      try { data = collectData(name); }
+      catch (e) { throw new Error('Invalid JSON: ' + e.message); }
+
+      previewRes = await api('/api/preview/template', {
+        method: 'POST',
+        body: JSON.stringify({ template: name, data }),
+      });
+      if (!previewRes.ok) {
+        const err = await previewRes.json().catch(() => ({ detail: previewRes.statusText }));
+        throw new Error(err.detail ?? previewRes.statusText);
+      }
+      const blob = await previewRes.blob();
+      const url  = URL.createObjectURL(blob);
+
+      const screen = document.getElementById('eink-screen');
+      screen.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = url;
+      screen.appendChild(img);
+
+      lastPreviewPayload = { template: name, data };
+      document.getElementById('btn-push').disabled = false;
+      setChip('', 'ready to push');
     }
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-
-    const screen = document.getElementById('eink-screen');
-    screen.innerHTML = '';
-    const img = document.createElement('img');
-    img.src = url;
-    screen.appendChild(img);
-
-    lastPreviewPayload = { template: name, data };
-    document.getElementById('btn-push').disabled = false;
-    setChip('', 'ready to push');
   } catch (e) {
     showError(e.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Preview';
+    btn.textContent = isStock ? 'Fetch & Preview' : 'Preview';
   }
 });
 
@@ -1100,17 +1150,26 @@ document.getElementById('btn-preview').addEventListener('click', async () => {
 document.getElementById('btn-push').addEventListener('click', async () => {
   if (!lastPreviewPayload) return;
   const device = document.getElementById('device-select').value || undefined;
-  const payload = { ...lastPreviewPayload, ...(device ? { device } : {}) };
   const btn = document.getElementById('btn-push');
   btn.disabled = true;
   setChip('queued', 'queuing…');
   hideError();
 
   try {
-    const res = await api('/api/push/template', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    let res;
+    if (lastPreviewPayload._stockPush) {
+      // Use the stocks push endpoint
+      res = await api('/api/push/stocks', {
+        method: 'POST',
+        body: JSON.stringify({ symbols: lastPreviewPayload.symbols, ...(device ? { device } : {}) }),
+      });
+    } else {
+      const payload = { ...lastPreviewPayload, ...(device ? { device } : {}) };
+      res = await api('/api/push/template', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    }
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error(err.detail ?? res.statusText);
