@@ -1004,24 +1004,16 @@ function buildForm(name) {
   const container = document.getElementById('tmpl-fields');
   container.innerHTML = '';
 
-  // Update preview button label based on template
-  const previewBtn = document.getElementById('btn-preview');
-  previewBtn.textContent = (name === 'stock') ? 'Fetch & Preview' : 'Preview';
+  document.getElementById('btn-preview').textContent = (name === 'stock') ? 'Fetch & Preview' : 'Preview';
 
   const fields = TMPL_FIELDS[name];
   if (!fields) {
-    // Fallback: raw JSON textarea, pre-populated with example if available
-    const example = TMPL_EXAMPLES[name] || '{}';
     const wrap = makeField('Data (JSON)', 'raw-json', 'textarea', '');
     const ta = wrap.querySelector('textarea');
-    ta.value = example;
+    ta.value = TMPL_EXAMPLES[name] || '{}';
     ta.style.minHeight = '220px';
     container.appendChild(wrap);
-    return;
-  }
-
-  // For stock template, render as a 2x2 grid
-  if (name === 'stock') {
+  } else if (name === 'stock') {
     const grid = document.createElement('div');
     grid.className = 'two-col';
     fields.forEach(f => {
@@ -1031,36 +1023,34 @@ function buildForm(name) {
       grid.appendChild(wrap);
     });
     container.appendChild(grid);
-    return;
-  }
-
-  const selects = fields.filter(f => f.type === 'select');
-  const others  = fields.filter(f => f.type !== 'select');
-
-  others.forEach(f => container.appendChild(makeField(f.label, 'f_' + f.key, f.type, f.placeholder || '', f.required, f.step)));
-
-  if (selects.length) {
-    const row = document.createElement('div');
-    row.className = 'two-col';
-    selects.forEach(f => {
-      const wrap = document.createElement('div');
-      wrap.className = 'field';
-      const lbl = document.createElement('label');
-      lbl.textContent = f.label;
-      const sel = document.createElement('select');
-      sel.id = 'f_' + f.key;
-      f.options.forEach(o => {
-        const opt = document.createElement('option');
-        opt.value = opt.textContent = o;
-        if (o === f.default) opt.selected = true;
-        sel.appendChild(opt);
+  } else {
+    const selects = fields.filter(f => f.type === 'select');
+    const others  = fields.filter(f => f.type !== 'select');
+    others.forEach(f => container.appendChild(makeField(f.label, 'f_' + f.key, f.type, f.placeholder || '', f.required, f.step)));
+    if (selects.length) {
+      const row = document.createElement('div');
+      row.className = 'two-col';
+      selects.forEach(f => {
+        const wrap = document.createElement('div');
+        wrap.className = 'field';
+        const lbl = document.createElement('label');
+        lbl.textContent = f.label;
+        const sel = document.createElement('select');
+        sel.id = 'f_' + f.key;
+        f.options.forEach(o => {
+          const opt = document.createElement('option');
+          opt.value = opt.textContent = o;
+          if (o === f.default) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        wrap.appendChild(lbl);
+        wrap.appendChild(sel);
+        row.appendChild(wrap);
       });
-      wrap.appendChild(lbl);
-      wrap.appendChild(sel);
-      row.appendChild(wrap);
-    });
-    container.appendChild(row);
+      container.appendChild(row);
+    }
   }
+  restoreTemplateFields(name);
 }
 
 function makeField(label, id, type, placeholder, required, step) {
@@ -1116,11 +1106,14 @@ async function loadTemplates() {
       opt.value = opt.textContent = name;
       sel.appendChild(opt);
     });
+    const savedTmpl = localStorage.getItem('codisplay_template');
+    if (savedTmpl && templates.includes(savedTmpl)) sel.value = savedTmpl;
     buildForm(sel.value);
   } catch {}
 }
 
 document.getElementById('tmpl-select').addEventListener('change', e => {
+  saveTemplateState();
   buildForm(e.target.value);
   lastPreviewPayload = null;
   document.getElementById('btn-push').disabled = true;
@@ -1431,6 +1424,52 @@ async function refreshHealth() {
   }
   healthTimer = setTimeout(refreshHealth, 5000);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Template state persistence (localStorage)
+// ═══════════════════════════════════════════════════════════════════════════
+function saveTemplateState() {
+  const name = document.getElementById('tmpl-select').value;
+  if (!name) return;
+  localStorage.setItem('codisplay_template', name);
+  const fields = TMPL_FIELDS[name];
+  const data = {};
+  if (fields) {
+    fields.forEach(f => {
+      const el = document.getElementById('f_' + f.key);
+      if (el) data[f.key] = el.value;
+    });
+  } else {
+    const ta = document.getElementById('raw-json');
+    if (ta) data._raw = ta.value;
+  }
+  localStorage.setItem('codisplay_tdata_' + name, JSON.stringify(data));
+}
+
+function restoreTemplateFields(name) {
+  const saved = localStorage.getItem('codisplay_tdata_' + name);
+  if (!saved) return;
+  try {
+    const data = JSON.parse(saved);
+    const fields = TMPL_FIELDS[name];
+    if (fields) {
+      fields.forEach(f => {
+        const el = document.getElementById('f_' + f.key);
+        if (el && data[f.key] !== undefined) el.value = data[f.key];
+      });
+    } else {
+      const ta = document.getElementById('raw-json');
+      if (ta && data._raw !== undefined) ta.value = data._raw;
+    }
+  } catch {}
+}
+
+// Save on any field change within the form panel
+let _tmplSaveTimer = null;
+document.querySelector('.form-panel').addEventListener('input', () => {
+  clearTimeout(_tmplSaveTimer);
+  _tmplSaveTimer = setTimeout(saveTemplateState, 400);
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Settings section
