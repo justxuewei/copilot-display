@@ -605,6 +605,46 @@ html, body {
   letter-spacing: 0.06em;
 }
 
+/* ── Settings section ────────────────────────────────────────────────────── */
+#section-settings {
+  flex-direction: column;
+  padding: 20px 24px;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.config-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 460px;
+}
+
+.config-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field-hint {
+  font-size: 10px;
+  color: var(--text-faint);
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+}
+
+.config-note {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  min-height: 16px;
+}
+.config-note.ok  { color: var(--green-hi); }
+.config-note.err { color: var(--accent-hi); }
+
 /* ── Auth overlay ────────────────────────────────────────────────────────── */
 .auth-overlay {
   position: fixed; inset: 0;
@@ -680,6 +720,9 @@ html, body {
     </div>
     <div class="nav-item" data-target="health">
       <span class="nav-icon">◎</span>Health
+    </div>
+    <div class="nav-item" data-target="settings">
+      <span class="nav-icon">⚙</span>Settings
     </div>
     <div class="sidebar-footer">BluTag 4.2″ · BLK/WHT/RED</div>
   </nav>
@@ -813,6 +856,42 @@ html, body {
       </div>
     </section>
 
+    <!-- ╔══ Settings ══╗ -->
+    <section class="section" id="section-settings">
+      <div class="section-hdr">
+        <span class="section-hdr-title">Settings</span>
+        <button class="btn btn-primary" id="btn-save-config">Save</button>
+      </div>
+      <div class="config-grid">
+        <div class="config-card">
+          <div class="form-heading">Scheduling</div>
+          <div class="field">
+            <label>Scan interval (s) — 0 to disable</label>
+            <input type="number" id="cfg-scan_interval" min="0" step="1" placeholder="60">
+          </div>
+          <div class="field">
+            <label>Refresh interval (s) — 0 to disable</label>
+            <input type="number" id="cfg-refresh_interval" min="0" step="1" placeholder="300">
+          </div>
+        </div>
+        <div class="config-card">
+          <div class="form-heading">Work hours</div>
+          <div class="two-col">
+            <div class="field">
+              <label>Start</label>
+              <input type="time" id="cfg-work_start">
+            </div>
+            <div class="field">
+              <label>End</label>
+              <input type="time" id="cfg-work_end">
+            </div>
+          </div>
+          <div class="field-hint">Outside work hours, background tasks are paused. Leave both empty to always run.</div>
+        </div>
+      </div>
+      <span class="config-note" id="config-note"></span>
+    </section>
+
   </main>
 </div>
 
@@ -895,6 +974,7 @@ document.querySelectorAll('.nav-item').forEach(item => {
     const t = item.dataset.target;
     if (t === 'devices') loadDevices();
     if (t === 'health') { clearTimeout(healthTimer); refreshHealth(); }
+    if (t === 'settings') loadConfig();
   });
 });
 
@@ -1351,6 +1431,46 @@ async function refreshHealth() {
   }
   healthTimer = setTimeout(refreshHealth, 5000);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Settings section
+// ═══════════════════════════════════════════════════════════════════════════
+async function loadConfig() {
+  try {
+    const res = await api('/api/config');
+    if (!res.ok) return;
+    const cfg = await res.json();
+    document.getElementById('cfg-scan_interval').value    = cfg.scan_interval    ?? 60;
+    document.getElementById('cfg-refresh_interval').value = cfg.refresh_interval ?? 300;
+    document.getElementById('cfg-work_start').value       = cfg.work_start       ?? '';
+    document.getElementById('cfg-work_end').value         = cfg.work_end         ?? '';
+  } catch {}
+}
+
+document.getElementById('btn-save-config').addEventListener('click', async () => {
+  const btn  = document.getElementById('btn-save-config');
+  const note = document.getElementById('config-note');
+  btn.disabled = true;
+  note.textContent = '';
+  note.className = 'config-note';
+  try {
+    const updates = {
+      scan_interval:    parseInt(document.getElementById('cfg-scan_interval').value,    10) || 0,
+      refresh_interval: parseInt(document.getElementById('cfg-refresh_interval').value, 10) || 0,
+      work_start: document.getElementById('cfg-work_start').value.trim(),
+      work_end:   document.getElementById('cfg-work_end').value.trim(),
+    };
+    const res = await api('/api/config', { method: 'PATCH', body: JSON.stringify(updates) });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? res.statusText);
+    note.textContent = 'Saved. Restart server to apply scheduling changes.';
+    note.className = 'config-note ok';
+  } catch (e) {
+    note.textContent = e.message;
+    note.className = 'config-note err';
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Utils

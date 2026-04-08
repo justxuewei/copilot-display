@@ -10,17 +10,20 @@ from typing import Any
 
 import io
 
+from pathlib import Path
+
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from copilot_display import __version__, templates
-from copilot_display.ble import clear_display, get_cached_devices, push_image, scan_devices
+from copilot_display.ble import clear_display, get_cached_devices, push_image, scan_devices, set_cached_devices
 from copilot_display.models import PushStocksRequest, PushTemplateRequest, PushTextRequest
 from copilot_display.templates.stock import DEFAULT_SYMBOLS, fetch_quotes
 from copilot_display.ui import UI_HTML
 from copilot_display.render import render_text
+from copilot_display.store import DataStore
 
 logger = logging.getLogger("copilot_display")
 
@@ -33,9 +36,11 @@ class Settings(BaseSettings):
     port: int = 8420
     scan_interval: int = 60
     device_address: str = "FF:FF:42:00:11:1C"
+    data_dir: Path = Path("/etc/codisplay")
 
 
 settings = Settings()
+store = DataStore(settings.data_dir)
 
 # Task queue and state store
 _queue: asyncio.Queue = asyncio.Queue()
@@ -46,6 +51,7 @@ async def _background_scan(interval: int) -> None:
     while True:
         try:
             await scan_devices(timeout=8.0)
+            store.save_devices(get_cached_devices())
         except Exception:
             logger.exception("Background scan failed")
         await asyncio.sleep(interval)
@@ -70,12 +76,21 @@ async def _queue_worker() -> None:
 async def lifespan(app: FastAPI):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     logger.info("Starting copilot-display v%s", __version__)
-    scan_task = asyncio.create_task(_background_scan(settings.scan_interval))
+    set_cached_devices(store.load_devices())
+    config = store.load_config()
+    logger.info("Config: %s", config)
+    scan_interval = config.get("scan_interval", settings.scan_interval)
     worker_task = asyncio.create_task(_queue_worker())
+    scan_task = None
+    if scan_interval > 0:
+        scan_task = asyncio.create_task(_background_scan(scan_interval))
+    else:
+        logger.info("Background BLE scan disabled (scan_interval=0)")
     yield
-    scan_task.cancel()
+    if scan_task is not None:
+        scan_task.cancel()
     worker_task.cancel()
-    for t in (scan_task, worker_task):
+    for t in filter(None, (scan_task, worker_task)):
         try:
             await t
         except asyncio.CancelledError:
@@ -112,6 +127,7 @@ async def list_devices():
 @app.post("/api/devices/scan")
 async def trigger_scan():
     devices = await scan_devices(timeout=10.0)
+    store.save_devices(devices)
     return {"found": len(devices), "devices": devices}
 
 
@@ -190,6 +206,21 @@ async def preview_stocks(req: PushStocksRequest | None = None):
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return Response(content=buf.getvalue(), media_type="image/png")
+
+
+@app.get("/api/config")
+async def get_config():
+    """Return the current persistent configuration."""
+    return store.load_config()
+
+
+@app.patch("/api/config")
+async def patch_config(updates: dict[str, Any]):
+    """Update one or more config keys and persist to disk."""
+    config = store.load_config()
+    config.update(updates)
+    store.save_config(config)
+    return config
 
 
 @app.get("/api/templates")
