@@ -20,6 +20,8 @@ pip install -e .
 
 ## Running
 
+### Locally
+
 ```bash
 copilot-display
 # or
@@ -29,6 +31,27 @@ python -m copilot_display.server
 Default: `http://0.0.0.0:8420`
 
 Open `http://localhost:8420` in a browser for the web UI.
+
+### Using Docker
+
+You can run the server via Docker. The container uses the `/etc/codisplay` volume for persistent configuration and state files.
+
+Because the Python application communicates with the host's Bluetooth Low Energy stack (`BlueZ`), the container must have access to the host's `dbus` socket to function:
+
+```bash
+docker run -d \
+  --name copilot-display \
+  --security-opt apparmor=unconfined \
+  --cap-add=NET_ADMIN \
+  -p 8420:8420 \
+  -v /var/run/dbus:/var/run/dbus \
+  -v codisplay_data:/etc/codisplay \
+  xavierniu/copilot-display
+```
+
+> **Note on Bluetooth Permissions:** Depending on your Linux distribution's `BlueZ` configuration, Docker's default security profiles can block D-Bus messages. 
+> - If you encounter `BleakDBusError: ... An AppArmor policy prevents...` errors, be sure to use `--security-opt apparmor=unconfined` to bypass the AppArmor D-Bus restrictions.
+> - If you encounter other BLE discovery or connection errors, you may need to grant `--cap-add=NET_ADMIN` or default to host networking (`--network host` instead of `-p 8420:8420`).
 
 ### Environment variables
 
