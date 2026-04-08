@@ -116,7 +116,7 @@ class StockTemplate(Template):
             pos = (price - low) / (high - low) if high > low else 0.5
             pos = max(0.0, min(1.0, pos))
             idx = max(0, min(bar_inner - 1, round(pos * (bar_inner - 1))))
-            bar = "[" + "░" * idx + "█" + "░" * (bar_inner - 1 - idx) + "]"
+            bar = "[" + "=" * idx + "█" + "=" * (bar_inner - 1 - idx) + "]"
             lines.append(row(bar))
 
         lines.append("└" + "─" * inner_w + "┘")
