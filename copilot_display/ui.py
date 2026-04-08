@@ -637,6 +637,25 @@ html, body {
   letter-spacing: 0.04em;
 }
 
+.day-picker { display: flex; gap: 4px; }
+.day-btn {
+  flex: 1;
+  padding: 5px 2px;
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.day-btn:hover { color: var(--text-dim); border-color: var(--text-faint); }
+.day-btn.on { background: var(--accent-lo); border-color: var(--accent); color: var(--accent-hi); }
+
 .config-note {
   font-size: 10px;
   letter-spacing: 0.06em;
@@ -887,6 +906,18 @@ html, body {
         </div>
         <div class="config-card">
           <div class="form-heading">Work hours</div>
+          <div class="field">
+            <label>Days</label>
+            <div class="day-picker" id="cfg-work_days">
+              <button type="button" class="day-btn" data-day="0">Mon</button>
+              <button type="button" class="day-btn" data-day="1">Tue</button>
+              <button type="button" class="day-btn" data-day="2">Wed</button>
+              <button type="button" class="day-btn" data-day="3">Thu</button>
+              <button type="button" class="day-btn" data-day="4">Fri</button>
+              <button type="button" class="day-btn" data-day="5">Sat</button>
+              <button type="button" class="day-btn" data-day="6">Sun</button>
+            </div>
+          </div>
           <div class="two-col">
             <div class="field">
               <label>Start</label>
@@ -897,7 +928,7 @@ html, body {
               <input type="time" id="cfg-work_end">
             </div>
           </div>
-          <div class="field-hint">Outside work hours, background tasks are paused. Leave both empty to always run.</div>
+          <div class="field-hint">Outside work hours/days, background tasks are paused. Leave both times empty to always run.</div>
         </div>
       </div>
       <span class="config-note" id="config-note"></span>
@@ -1512,12 +1543,20 @@ async function loadConfig() {
     document.getElementById('cfg-refresh_interval').value = _savedConfig.refresh_interval ?? 300;
     document.getElementById('cfg-work_start').value       = _savedConfig.work_start       ?? '';
     document.getElementById('cfg-work_end').value         = _savedConfig.work_end         ?? '';
+    const days = _savedConfig.work_days ?? [0,1,2,3,4];
+    document.querySelectorAll('#cfg-work_days .day-btn').forEach(b => {
+      b.classList.toggle('on', days.includes(parseInt(b.dataset.day)));
+    });
     const tmpl = _savedConfig.template;
     const el = document.getElementById('cfg-template-display');
     el.textContent = tmpl || '—';
     el.style.color = tmpl ? 'var(--text)' : 'var(--text-faint)';
   } catch {}
 }
+
+document.querySelectorAll('#cfg-work_days .day-btn').forEach(b => {
+  b.addEventListener('click', () => b.classList.toggle('on'));
+});
 
 document.getElementById('btn-save-config').addEventListener('click', async () => {
   const btn  = document.getElementById('btn-save-config');
@@ -1529,6 +1568,7 @@ document.getElementById('btn-save-config').addEventListener('click', async () =>
     const updates = {
       scan_interval:    parseInt(document.getElementById('cfg-scan_interval').value,    10) || 0,
       refresh_interval: parseInt(document.getElementById('cfg-refresh_interval').value, 10) || 0,
+      work_days: [...document.querySelectorAll('#cfg-work_days .day-btn.on')].map(b => parseInt(b.dataset.day)),
       work_start: document.getElementById('cfg-work_start').value.trim(),
       work_end:   document.getElementById('cfg-work_end').value.trim(),
     };
