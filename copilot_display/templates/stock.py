@@ -95,26 +95,45 @@ def _fetch_one(sym: str) -> dict | None:
     try:
         ticker = yf.Ticker(sym)
         info = ticker.info
-        price = info.get("currentPrice") or info.get("regularMarketPrice")
+
+        market_state = (info.get("marketState") or "").upper()  # PRE, REGULAR, POST, CLOSED
+
+        regular_price = info.get("currentPrice") or info.get("regularMarketPrice")
+        pre_price  = info.get("preMarketPrice")
+        post_price = info.get("postMarketPrice")
+
+        if market_state == "PRE" and pre_price:
+            price = pre_price
+            price_label = "PRE"
+        elif market_state in ("POST", "POSTPOST", "CLOSED") and post_price:
+            price = post_price
+            price_label = "POST"
+        else:
+            price = regular_price
+            price_label = ""
+
+        if price is None:
+            price = regular_price
+        if price is None:
+            return None
+
         high = info.get("dayHigh") or info.get("regularMarketDayHigh")
         low = info.get("dayLow") or info.get("regularMarketDayLow")
         prev_close = info.get("previousClose") or info.get(
             "regularMarketPreviousClose"
         )
 
-        if price is None:
-            return None
-
         change_pct = None
         if prev_close and prev_close != 0:
             change_pct = round((price - prev_close) / prev_close * 100, 2)
 
-        display_name = _DISPLAY_NAMES.get(sym, info.get("shortName", sym))
+        display_name = _DISPLAY_NAMES.get(sym, sym)
 
         return {
             "symbol": display_name,
             "_raw_sym": sym,
             "price": price,
+            "price_label": price_label,
             "low": low or price,
             "high": high or price,
             "change_pct": change_pct,
@@ -244,11 +263,12 @@ class StockTemplate(Template):
         for i, stock in enumerate(stocks):
             lines.append("├" + "─" * inner_w + "┤")
 
-            symbol     = str(stock.get("symbol", "?")).upper()
-            price      = float(stock["price"])
-            low        = float(stock.get("low", price))
-            high       = float(stock.get("high", price))
-            change_pct = stock.get("change_pct")
+            symbol      = str(stock.get("symbol", "?")).upper()
+            price       = float(stock["price"])
+            low         = float(stock.get("low", price))
+            high        = float(stock.get("high", price))
+            change_pct  = stock.get("change_pct")
+            price_label = str(stock.get("price_label") or "")
 
             price_str = f"{price:,.2f}"
             if change_pct is not None:
@@ -262,11 +282,13 @@ class StockTemplate(Template):
             sym   = symbol[:max(0, sym_w)].ljust(max(0, sym_w))
             lines.append(f"│ {sym}{right} │")
 
-            # Progress bar
+            # Progress bar — append price_label (e.g. "PRE") inside brackets
             pos = (price - low) / (high - low) if high > low else 0.5
             pos = max(0.0, min(1.0, pos))
-            idx = max(0, min(bar_inner - 1, round(pos * (bar_inner - 1))))
-            bar = "[" + "=" * idx + "█" + "=" * (bar_inner - 1 - idx) + "]"
+            label_suffix = f" {price_label}" if price_label else ""
+            bar_usable = bar_inner - len(label_suffix)
+            idx = max(0, min(bar_usable - 1, round(pos * (bar_usable - 1))))
+            bar = "[" + "=" * idx + "█" + "=" * (bar_usable - 1 - idx) + label_suffix + "]"
             lines.append(row(bar))
 
         lines.append("└" + "─" * inner_w + "┘")
