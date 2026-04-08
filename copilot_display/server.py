@@ -6,7 +6,7 @@ import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timedelta
 from typing import Any
 
 import io
@@ -46,8 +46,9 @@ store = DataStore(settings.data_dir)
 # Task queue and state store
 _queue: asyncio.Queue = asyncio.Queue()
 _tasks: dict[str, dict[str, Any]] = {}
-_last_refresh: datetime | None = None
-_last_scan:    datetime | None = None
+_last_refresh:    datetime | None = None
+_last_scan:       datetime | None = None
+_next_refresh_at: datetime | None = None
 
 
 def _load_timestamps() -> None:
@@ -143,8 +144,11 @@ async def _do_refresh() -> None:
 
 
 async def _background_refresh(interval: int) -> None:
+    global _next_refresh_at
+    _next_refresh_at = datetime.now() + timedelta(seconds=interval)
     while True:
         await asyncio.sleep(interval)
+        _next_refresh_at = datetime.now() + timedelta(seconds=interval)
         try:
             await _do_refresh()
         except Exception:
@@ -198,15 +202,9 @@ async def auth_middleware(request: Request, call_next):
 
 @app.get("/api/health")
 async def health():
-    config = store.load_config()
-    refresh_interval = config.get("refresh_interval", 0)
     next_refresh_in: int | None = None
-    if refresh_interval > 0:
-        if _last_refresh:
-            elapsed = (datetime.now() - _last_refresh).total_seconds()
-            next_refresh_in = max(0, int(refresh_interval - elapsed))
-        else:
-            next_refresh_in = refresh_interval
+    if _next_refresh_at is not None:
+        next_refresh_in = max(0, int((_next_refresh_at - datetime.now()).total_seconds()))
     return {
         "status": "ok",
         "version": __version__,
@@ -214,7 +212,6 @@ async def health():
         "queue_depth": _queue.qsize(),
         "last_refresh": _last_refresh.isoformat() if _last_refresh else None,
         "next_refresh_in": next_refresh_in,
-        "refresh_interval": refresh_interval,
     }
 
 
