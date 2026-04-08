@@ -104,16 +104,9 @@ async def _do_refresh() -> None:
         return
 
     template_data = config.get("template_data", {})
-
-    if template_name == "stock":
-        symbols = [template_data.get(f"sym{i}") for i in range(1, 5)]
-        symbols = [s for s in symbols if s] or DEFAULT_SYMBOLS
-        logger.info("Refresh: fetching live quotes for %s", symbols)
-        loop = asyncio.get_running_loop()
-        data = await loop.run_in_executor(None, fetch_quotes, symbols)
-        img = tmpl.render(data)
-    else:
-        img = tmpl.render(template_data)
+    loop = asyncio.get_running_loop()
+    data = await loop.run_in_executor(None, tmpl.fetch, template_data)
+    img = tmpl.render(data)
 
     device = settings.device_address or None
     task_id = str(uuid.uuid4())
@@ -246,7 +239,9 @@ async def preview_template(req: PushTemplateRequest):
         )
 
     try:
-        img = tmpl.render(req.data)
+        loop = asyncio.get_running_loop()
+        data = await loop.run_in_executor(None, tmpl.fetch, req.data)
+        img = tmpl.render(data)
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=f"Template data error: {exc}") from exc
 
@@ -306,7 +301,9 @@ async def push_template(req: PushTemplateRequest):
         )
 
     try:
-        img = tmpl.render(req.data)
+        loop = asyncio.get_running_loop()
+        data = await loop.run_in_executor(None, tmpl.fetch, req.data)
+        img = tmpl.render(data)
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=f"Template data error: {exc}") from exc
 
