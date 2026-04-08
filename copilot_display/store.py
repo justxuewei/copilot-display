@@ -14,8 +14,9 @@ _CONFIG_FILE = "config.json"
 _DEFAULT_CONFIG: dict = {
     "scan_interval": 60,     # seconds between BLE device scans (0 = disabled)
     "refresh_interval": 300, # seconds between automatic display refreshes (0 = disabled)
-    "work_start": "10:00",   # HH:MM — start of active window (empty = always active)
-    "work_end": "20:00",     # HH:MM — end of active window (empty = always active)
+    "work_days": [0, 1, 2, 3, 4],  # 0=Mon … 6=Sun; empty list = every day
+    "work_start": "10:00",         # HH:MM — start of active window (empty = always active)
+    "work_end": "20:00",           # HH:MM — end of active window (empty = always active)
 }
 
 
