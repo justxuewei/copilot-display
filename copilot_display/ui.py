@@ -39,7 +39,7 @@ html, body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.5;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
@@ -166,7 +166,7 @@ html, body {
 .nav-icon {
   width: 16px;
   text-align: center;
-  font-size: 13px;
+  font-size: 15px;
   flex-shrink: 0;
   opacity: 0.7;
 }
@@ -247,7 +247,7 @@ html, body {
   border-radius: var(--radius);
   padding: 7px 9px;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 15px;
   color: var(--text);
   outline: none;
   width: 100%;
