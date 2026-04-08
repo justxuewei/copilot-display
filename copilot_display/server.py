@@ -49,6 +49,7 @@ _tasks: dict[str, dict[str, Any]] = {}
 _last_refresh:    datetime | None = None
 _last_scan:       datetime | None = None
 _next_refresh_at: datetime | None = None
+_refresh_task:    asyncio.Task | None = None
 
 
 def _load_timestamps() -> None:
@@ -170,18 +171,18 @@ async def lifespan(app: FastAPI):
         scan_task = asyncio.create_task(_background_scan(scan_interval))
     else:
         logger.info("Background BLE scan disabled (scan_interval=0)")
+    global _refresh_task
     refresh_interval = config.get("refresh_interval", 0)
-    refresh_task = None
     if refresh_interval > 0:
-        refresh_task = asyncio.create_task(_background_refresh(refresh_interval))
+        _refresh_task = asyncio.create_task(_background_refresh(refresh_interval))
         logger.info("Background refresh enabled (interval=%ds)", refresh_interval)
     else:
         logger.info("Background refresh disabled (refresh_interval=0)")
     yield
-    for t in filter(None, (scan_task, refresh_task)):
+    for t in filter(None, (scan_task, _refresh_task)):
         t.cancel()
     worker_task.cancel()
-    for t in filter(None, (scan_task, refresh_task, worker_task)):
+    for t in filter(None, (scan_task, _refresh_task, worker_task)):
         try:
             await t
         except asyncio.CancelledError:
@@ -315,9 +316,24 @@ async def get_config():
 @app.patch("/api/config")
 async def patch_config(updates: dict[str, Any]):
     """Update one or more config keys and persist to disk."""
+    global _refresh_task
     config = store.load_config()
     config.update(updates)
     store.save_config(config)
+    if "refresh_interval" in updates:
+        if _refresh_task is not None:
+            _refresh_task.cancel()
+            try:
+                await _refresh_task
+            except asyncio.CancelledError:
+                pass
+        new_interval = updates["refresh_interval"]
+        if new_interval > 0:
+            _refresh_task = asyncio.create_task(_background_refresh(new_interval))
+            logger.info("Background refresh restarted (interval=%ds)", new_interval)
+        else:
+            _refresh_task = None
+            logger.info("Background refresh disabled")
     return config
 
 
