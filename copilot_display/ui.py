@@ -918,6 +918,7 @@ let authResolve = null;
 let lastPreviewPayload = null;  // {template, data} of last successful preview
 let taskPollTimer = null;
 let healthTimer = null;
+let _savedConfig = {};  // local mirror of server config.json
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Auth
@@ -1106,8 +1107,7 @@ async function loadTemplates() {
       opt.value = opt.textContent = name;
       sel.appendChild(opt);
     });
-    const savedTmpl = localStorage.getItem('codisplay_template');
-    if (savedTmpl && templates.includes(savedTmpl)) sel.value = savedTmpl;
+    if (_savedConfig.template && templates.includes(_savedConfig.template)) sel.value = _savedConfig.template;
     buildForm(sel.value);
   } catch {}
 }
@@ -1426,45 +1426,49 @@ async function refreshHealth() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Template state persistence (localStorage)
+// Template state persistence (server config)
 // ═══════════════════════════════════════════════════════════════════════════
-function saveTemplateState() {
-  const name = document.getElementById('tmpl-select').value;
-  if (!name) return;
-  localStorage.setItem('codisplay_template', name);
+
+// Reads from _savedConfig — called synchronously from buildForm after DOM is built.
+function restoreTemplateFields(name) {
+  if (_savedConfig.template !== name || !_savedConfig.template_data) return;
+  const data = _savedConfig.template_data;
   const fields = TMPL_FIELDS[name];
-  const data = {};
   if (fields) {
     fields.forEach(f => {
       const el = document.getElementById('f_' + f.key);
-      if (el) data[f.key] = el.value;
+      if (el && data[f.key] !== undefined) el.value = data[f.key];
     });
   } else {
     const ta = document.getElementById('raw-json');
-    if (ta) data._raw = ta.value;
+    if (ta && data._raw !== undefined) ta.value = data._raw;
   }
-  localStorage.setItem('codisplay_tdata_' + name, JSON.stringify(data));
 }
 
-function restoreTemplateFields(name) {
-  const saved = localStorage.getItem('codisplay_tdata_' + name);
-  if (!saved) return;
-  try {
-    const data = JSON.parse(saved);
-    const fields = TMPL_FIELDS[name];
-    if (fields) {
-      fields.forEach(f => {
-        const el = document.getElementById('f_' + f.key);
-        if (el && data[f.key] !== undefined) el.value = data[f.key];
-      });
-    } else {
-      const ta = document.getElementById('raw-json');
-      if (ta && data._raw !== undefined) ta.value = data._raw;
-    }
-  } catch {}
+// Collect current field values and PATCH to server config.
+async function saveTemplateState() {
+  const name = document.getElementById('tmpl-select').value;
+  if (!name) return;
+  const fields = TMPL_FIELDS[name];
+  const template_data = {};
+  if (fields) {
+    fields.forEach(f => {
+      const el = document.getElementById('f_' + f.key);
+      if (el) template_data[f.key] = el.value;
+    });
+  } else {
+    const ta = document.getElementById('raw-json');
+    if (ta) template_data._raw = ta.value;
+  }
+  _savedConfig.template = name;
+  _savedConfig.template_data = template_data;
+  await api('/api/config', {
+    method: 'PATCH',
+    body: JSON.stringify({ template: name, template_data }),
+  }).catch(() => {});
 }
 
-// Save on any field change within the form panel
+// Save on any field change within the form panel (debounced)
 let _tmplSaveTimer = null;
 document.querySelector('.form-panel').addEventListener('input', () => {
   clearTimeout(_tmplSaveTimer);
@@ -1478,11 +1482,11 @@ async function loadConfig() {
   try {
     const res = await api('/api/config');
     if (!res.ok) return;
-    const cfg = await res.json();
-    document.getElementById('cfg-scan_interval').value    = cfg.scan_interval    ?? 60;
-    document.getElementById('cfg-refresh_interval').value = cfg.refresh_interval ?? 300;
-    document.getElementById('cfg-work_start').value       = cfg.work_start       ?? '';
-    document.getElementById('cfg-work_end').value         = cfg.work_end         ?? '';
+    _savedConfig = await res.json();
+    document.getElementById('cfg-scan_interval').value    = _savedConfig.scan_interval    ?? 60;
+    document.getElementById('cfg-refresh_interval').value = _savedConfig.refresh_interval ?? 300;
+    document.getElementById('cfg-work_start').value       = _savedConfig.work_start       ?? '';
+    document.getElementById('cfg-work_end').value         = _savedConfig.work_end         ?? '';
   } catch {}
 }
 
@@ -1501,6 +1505,7 @@ document.getElementById('btn-save-config').addEventListener('click', async () =>
     };
     const res = await api('/api/config', { method: 'PATCH', body: JSON.stringify(updates) });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? res.statusText);
+    _savedConfig = await res.json();
     note.textContent = 'Saved. Restart server to apply scheduling changes.';
     note.className = 'config-note ok';
   } catch (e) {
@@ -1522,6 +1527,11 @@ function esc(s) {
 // Init
 // ═══════════════════════════════════════════════════════════════════════════
 (async () => {
+  // Load config first so _savedConfig is ready before buildForm restores template fields
+  try {
+    const res = await api('/api/config');
+    if (res.ok) _savedConfig = await res.json();
+  } catch {}
   await loadTemplates();
   await loadDeviceDropdown();
   refreshHealth();
