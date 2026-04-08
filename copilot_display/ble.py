@@ -290,6 +290,13 @@ def get_cached_devices() -> list[dict]:
     return list(_device_cache.values())
 
 
+def set_cached_devices(devices: list[dict]) -> None:
+    """Pre-populate the device cache (e.g. from persisted storage)."""
+    _device_cache.clear()
+    for d in devices:
+        _device_cache[d["address"]] = d
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 async def clear_display(device_address: str | None = None) -> dict:
