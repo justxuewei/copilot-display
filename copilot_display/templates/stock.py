@@ -63,52 +63,109 @@ _DISPLAY_NAMES: dict[str, str] = {
 }
 
 
+def _parse_symbols(raw: list[str]) -> tuple[list[str], set[str]]:
+    """Parse symbol list, extracting (top) markers.
+
+    Returns (clean_symbols, top_symbols) where clean_symbols has the (top)
+    suffix stripped and top_symbols is the set of symbols that must be shown.
+
+    Raises ValueError if more than 4 symbols are marked (top).
+    """
+    clean: list[str] = []
+    top: set[str] = set()
+    for entry in raw:
+        entry = entry.strip()
+        if not entry:
+            continue
+        if entry.lower().endswith("(top)"):
+            sym = entry[: -len("(top)")].strip()
+            clean.append(sym)
+            top.add(sym)
+        else:
+            clean.append(entry)
+    if len(top) > 4:
+        raise ValueError(
+            f"Too many (top) symbols ({len(top)}); at most 4 are allowed."
+        )
+    return clean, top
+
+
+def _fetch_one(sym: str) -> dict | None:
+    """Fetch a single ticker from Yahoo Finance. Returns None on failure."""
+    try:
+        ticker = yf.Ticker(sym)
+        info = ticker.info
+        price = info.get("currentPrice") or info.get("regularMarketPrice")
+        high = info.get("dayHigh") or info.get("regularMarketDayHigh")
+        low = info.get("dayLow") or info.get("regularMarketDayLow")
+        prev_close = info.get("previousClose") or info.get(
+            "regularMarketPreviousClose"
+        )
+
+        if price is None:
+            return None
+
+        change_pct = None
+        if prev_close and prev_close != 0:
+            change_pct = round((price - prev_close) / prev_close * 100, 2)
+
+        display_name = _DISPLAY_NAMES.get(sym, info.get("shortName", sym))
+
+        return {
+            "symbol": display_name,
+            "_raw_sym": sym,
+            "price": price,
+            "low": low or price,
+            "high": high or price,
+            "change_pct": change_pct,
+        }
+    except Exception as exc:
+        logger.warning("Failed to fetch %s: %s", sym, exc)
+        return None
+
+
 def fetch_quotes(symbols: list[str] | None = None) -> dict:
     """Return stock template-compatible data dict for the given symbols.
+
+    Symbols may carry a ``(top)`` suffix to mark them as always-visible.
+    If more than 4 symbols are provided, all are fetched and then filtered:
+    - (top) symbols are always included (error if > 4 top symbols)
+    - remaining slots (up to 4 total) filled by highest absolute % change
 
     Returns
     -------
     dict with keys ``stocks`` (list) and ``updated_at`` (str HH:MM).
     Each stock entry has: symbol, price, low, high, change_pct.
     """
-    symbols = (symbols or DEFAULT_SYMBOLS)[:4]
-    stocks: list[dict] = []
+    raw = symbols or DEFAULT_SYMBOLS
+    clean_syms, top_syms = _parse_symbols(raw)
 
-    for sym in symbols:
-        try:
-            ticker = yf.Ticker(sym)
-            info = ticker.info
-            price = info.get("currentPrice") or info.get("regularMarketPrice")
-            high = info.get("dayHigh") or info.get("regularMarketDayHigh")
-            low = info.get("dayLow") or info.get("regularMarketDayLow")
-            prev_close = info.get("previousClose") or info.get(
-                "regularMarketPreviousClose"
-            )
+    # Fetch all
+    fetched: list[dict] = []
+    for sym in clean_syms:
+        entry = _fetch_one(sym)
+        if entry is not None:
+            fetched.append(entry)
 
-            if price is None:
-                continue
+    if not fetched:
+        raise RuntimeError(f"Could not fetch data for any of: {clean_syms}")
 
-            change_pct = None
-            if prev_close and prev_close != 0:
-                change_pct = round((price - prev_close) / prev_close * 100, 2)
+    # Select up to 4 to display
+    if len(fetched) <= 4:
+        selected = fetched
+    else:
+        pinned = [e for e in fetched if e["_raw_sym"] in top_syms]
+        regular = [e for e in fetched if e["_raw_sym"] not in top_syms]
+        slots = 4 - len(pinned)
+        regular_sorted = sorted(
+            regular,
+            key=lambda e: abs(e["change_pct"]) if e["change_pct"] is not None else 0,
+            reverse=True,
+        )
+        selected = pinned + regular_sorted[:slots]
 
-            display_name = _DISPLAY_NAMES.get(sym, info.get("shortName", sym))
-
-            stocks.append(
-                {
-                    "symbol": display_name,
-                    "price": price,
-                    "low": low or price,
-                    "high": high or price,
-                    "change_pct": change_pct,
-                }
-            )
-        except Exception as exc:
-            logger.warning("Failed to fetch %s: %s", sym, exc)
-            continue
-
-    if not stocks:
-        raise RuntimeError(f"Could not fetch data for any of: {symbols}")
+    # Strip internal key before returning
+    stocks = [{k: v for k, v in e.items() if k != "_raw_sym"} for e in selected]
 
     return {
         "stocks": stocks,
@@ -120,10 +177,24 @@ class StockTemplate(Template):
     name = "stock"
 
     def fetch(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Extract ticker symbols from data and fetch live quotes."""
-        symbols = [data.get(f"sym{i}") for i in range(1, 5)]
-        symbols = [s for s in symbols if s] or DEFAULT_SYMBOLS
-        return fetch_quotes(symbols)
+        """Extract ticker symbols from data and fetch live quotes.
+
+        Accepts either:
+        - ``symbols`` key: comma-separated string or list of ticker codes
+        - Legacy ``sym1``..``sym4`` keys (for backwards compatibility)
+
+        Ticker codes may carry a ``(top)`` suffix to mark them as always shown.
+        """
+        if "symbols" in data:
+            raw = data["symbols"]
+            if isinstance(raw, str):
+                symbols = [s.strip() for s in raw.split(",") if s.strip()]
+            else:
+                symbols = list(raw)
+        else:
+            symbols = [data.get(f"sym{i}") for i in range(1, 5)]
+            symbols = [s for s in symbols if s]
+        return fetch_quotes(symbols or DEFAULT_SYMBOLS)
 
     def render(self, data: dict[str, Any]) -> Image.Image:
         stocks = data.get("stocks")

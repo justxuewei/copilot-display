@@ -1047,12 +1047,7 @@ const TMPL_FIELDS = {
     { key: 'title_color', label: 'Title color', type: 'select',   options: ['red','black'],   default: 'red' },
     { key: 'body_color',  label: 'Body color',  type: 'select',   options: ['black','red'],   default: 'black' },
   ],
-  stock: [
-    { key: 'sym1', label: 'Ticker 1', type: 'text', placeholder: '^IXIC',  default: '^IXIC' },
-    { key: 'sym2', label: 'Ticker 2', type: 'text', placeholder: '^GSPC',  default: '^GSPC' },
-    { key: 'sym3', label: 'Ticker 3', type: 'text', placeholder: 'GC=F',   default: 'GC=F' },
-    { key: 'sym4', label: 'Ticker 4', type: 'text', placeholder: 'BZ=F',   default: 'BZ=F' },
-  ],
+  stock: null,
 };
 
 function buildForm(name) {
@@ -1069,15 +1064,14 @@ function buildForm(name) {
     ta.style.minHeight = '220px';
     container.appendChild(wrap);
   } else if (name === 'stock') {
-    const grid = document.createElement('div');
-    grid.className = 'two-col';
-    fields.forEach(f => {
-      const wrap = makeField(f.label, 'f_' + f.key, f.type, f.placeholder || '', f.required, f.step);
-      const input = wrap.querySelector('input');
-      if (f.default) input.value = f.default;
-      grid.appendChild(wrap);
-    });
-    container.appendChild(grid);
+    const wrap = makeField('Ticker symbols', 'f_symbols', 'text', '^IXIC,^GSPC,GC=F,BZ=F', false);
+    const input = wrap.querySelector('input');
+    input.style.width = '100%';
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:11px;color:#888;margin-top:4px';
+    hint.textContent = 'Comma-separated codes. Append (top) to always show a ticker (e.g. "UNH(top),^IXIC,AAPL"). If > 4 codes, top 4 by abs change are shown.';
+    wrap.appendChild(hint);
+    container.appendChild(wrap);
   } else {
     const selects = fields.filter(f => f.type === 'select');
     const others  = fields.filter(f => f.type !== 'select');
@@ -1209,11 +1203,10 @@ document.getElementById('btn-preview').addEventListener('click', async () => {
     let previewRes;
 
     if (isStock) {
-      // Collect ticker symbols from inputs
-      const symbols = ['sym1','sym2','sym3','sym4']
-        .map(k => (document.getElementById('f_' + k)?.value || '').trim())
-        .filter(Boolean);
-      if (!symbols.length) throw new Error('Enter at least one ticker symbol');
+      // Collect ticker symbols from comma-separated input
+      const raw = (document.getElementById('f_symbols')?.value || '').trim();
+      if (!raw) throw new Error('Enter at least one ticker symbol');
+      const symbols = raw.split(',').map(s => s.trim()).filter(Boolean);
 
       // Fetch live data via /api/preview/stocks
       const fetchRes = await api('/api/preview/stocks', {
@@ -1487,15 +1480,20 @@ async function refreshHealth() {
 function restoreTemplateFields(name) {
   if (_savedConfig.template !== name || !_savedConfig.template_data) return;
   const data = _savedConfig.template_data;
-  const fields = TMPL_FIELDS[name];
-  if (fields) {
-    fields.forEach(f => {
-      const el = document.getElementById('f_' + f.key);
-      if (el && data[f.key] !== undefined) el.value = data[f.key];
-    });
+  if (name === 'stock') {
+    const el = document.getElementById('f_symbols');
+    if (el && data.symbols !== undefined) el.value = data.symbols;
   } else {
-    const ta = document.getElementById('raw-json');
-    if (ta && data._raw !== undefined) ta.value = data._raw;
+    const fields = TMPL_FIELDS[name];
+    if (fields) {
+      fields.forEach(f => {
+        const el = document.getElementById('f_' + f.key);
+        if (el && data[f.key] !== undefined) el.value = data[f.key];
+      });
+    } else {
+      const ta = document.getElementById('raw-json');
+      if (ta && data._raw !== undefined) ta.value = data._raw;
+    }
   }
 }
 
@@ -1503,16 +1501,21 @@ function restoreTemplateFields(name) {
 async function saveTemplateState() {
   const name = document.getElementById('tmpl-select').value;
   if (!name) return;
-  const fields = TMPL_FIELDS[name];
   const template_data = {};
-  if (fields) {
-    fields.forEach(f => {
-      const el = document.getElementById('f_' + f.key);
-      if (el) template_data[f.key] = el.value;
-    });
+  if (name === 'stock') {
+    const el = document.getElementById('f_symbols');
+    if (el) template_data.symbols = el.value;
   } else {
-    const ta = document.getElementById('raw-json');
-    if (ta) template_data._raw = ta.value;
+    const fields = TMPL_FIELDS[name];
+    if (fields) {
+      fields.forEach(f => {
+        const el = document.getElementById('f_' + f.key);
+        if (el) template_data[f.key] = el.value;
+      });
+    } else {
+      const ta = document.getElementById('raw-json');
+      if (ta) template_data._raw = ta.value;
+    }
   }
   _savedConfig.template = name;
   _savedConfig.template_data = template_data;
