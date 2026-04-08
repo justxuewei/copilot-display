@@ -9,6 +9,7 @@ dependencies = [
     "bleak>=0.22,<1.0",
     "pillow>=10.0.0",
     "pydantic-settings>=2.2.0",
+    "yfinance>=1.2.1",
 ]
 
 [project.scripts]

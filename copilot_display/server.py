@@ -17,7 +17,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from copilot_display import __version__, templates
 from copilot_display.ble import clear_display, get_cached_devices, push_image, scan_devices
-from copilot_display.models import PushTemplateRequest, PushTextRequest
+from copilot_display.models import PushStocksRequest, PushTemplateRequest, PushTextRequest
+from copilot_display.templates.stock import DEFAULT_SYMBOLS, fetch_quotes
 from copilot_display.ui import UI_HTML
 from copilot_display.render import render_text
 
@@ -172,6 +173,24 @@ async def preview_template(req: PushTemplateRequest):
     return Response(content=buf.getvalue(), media_type="image/png")
 
 
+@app.post("/api/preview/stocks")
+async def preview_stocks(req: PushStocksRequest | None = None):
+    """Fetch live quotes and return rendered stock image as PNG (no push)."""
+    symbols = (req.symbols if req else None) or DEFAULT_SYMBOLS
+
+    try:
+        data = fetch_quotes(symbols)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    tmpl = templates.get("stock")
+    img = tmpl.render(data)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
 @app.get("/api/templates")
 async def list_templates():
     """List all available template names."""
@@ -203,6 +222,35 @@ async def push_template(req: PushTemplateRequest):
         _queue.qsize(),
     )
     return {"task_id": task_id, "status": "queued"}
+
+
+@app.post("/api/push/stocks", status_code=202)
+async def push_stocks(req: PushStocksRequest | None = None):
+    """Fetch live quotes from Yahoo Finance and push to the display.
+
+    Accepts up to 4 ticker symbols. Defaults to NASDAQ, S&P 500, Gold, Brent.
+    """
+    symbols = (req.symbols if req else None) or DEFAULT_SYMBOLS
+    device = (req.device if req else None) or settings.device_address or None
+
+    try:
+        data = fetch_quotes(symbols)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    tmpl = templates.get("stock")
+    img = tmpl.render(data)
+
+    task_id = str(uuid.uuid4())
+    _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
+    await _queue.put((task_id, img, device))
+    logger.info(
+        "Enqueued stocks task %s (symbols=%s, queue depth: %d)",
+        task_id,
+        symbols,
+        _queue.qsize(),
+    )
+    return {"task_id": task_id, "status": "queued", "symbols": symbols, "data": data}
 
 
 @app.get("/api/tasks/{task_id}")

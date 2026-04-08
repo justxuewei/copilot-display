@@ -36,11 +36,80 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
+import yfinance as yf
+
 from copilot_display.render import COLOR_MAP, SCREEN_H, SCREEN_W
 from copilot_display.templates.base import Template
 
 _FONT_PATH = "/usr/share/fonts/truetype/cascadia-code/CascadiaMono.ttf"
 _FONT_SIZE = 16
+
+DEFAULT_SYMBOLS = ["^IXIC", "^GSPC", "GC=F", "BZ=F"]
+
+# Friendly display names for common tickers
+_DISPLAY_NAMES: dict[str, str] = {
+    "^IXIC": "NASDAQ",
+    "^GSPC": "S&P 500",
+    "^DJI": "DOW",
+    "GC=F": "GOLD",
+    "SI=F": "SILVER",
+    "BZ=F": "BRENT",
+    "CL=F": "WTI",
+    "BTC-USD": "BTC",
+    "ETH-USD": "ETH",
+}
+
+
+def fetch_quotes(symbols: list[str] | None = None) -> dict:
+    """Return stock template-compatible data dict for the given symbols.
+
+    Returns
+    -------
+    dict with keys ``stocks`` (list) and ``updated_at`` (str HH:MM).
+    Each stock entry has: symbol, price, low, high, change_pct.
+    """
+    symbols = (symbols or DEFAULT_SYMBOLS)[:4]
+    stocks: list[dict] = []
+
+    for sym in symbols:
+        try:
+            ticker = yf.Ticker(sym)
+            info = ticker.info
+            price = info.get("currentPrice") or info.get("regularMarketPrice")
+            high = info.get("dayHigh") or info.get("regularMarketDayHigh")
+            low = info.get("dayLow") or info.get("regularMarketDayLow")
+            prev_close = info.get("previousClose") or info.get(
+                "regularMarketPreviousClose"
+            )
+
+            if price is None:
+                continue
+
+            change_pct = None
+            if prev_close and prev_close != 0:
+                change_pct = round((price - prev_close) / prev_close * 100, 2)
+
+            display_name = _DISPLAY_NAMES.get(sym, info.get("shortName", sym))
+
+            stocks.append(
+                {
+                    "symbol": display_name,
+                    "price": price,
+                    "low": low or price,
+                    "high": high or price,
+                    "change_pct": change_pct,
+                }
+            )
+        except Exception:
+            continue
+
+    if not stocks:
+        raise RuntimeError(f"Could not fetch data for any of: {symbols}")
+
+    return {
+        "stocks": stocks,
+        "updated_at": datetime.now().strftime("%H:%M"),
+    }
 
 
 class StockTemplate(Template):
