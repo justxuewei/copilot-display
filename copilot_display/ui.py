@@ -901,7 +901,7 @@ html, body {
           <div class="form-heading">Refresh template</div>
           <div class="field">
             <label>Active template</label>
-            <div id="cfg-template-display" style="padding:7px 9px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-dim)">—</div>
+            <div id="cfg-template-display" style="padding:7px 9px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-dim);font-size:12px">—</div>
           </div>
           <div class="field-hint">Set via the Template section. This template and its data will be used for background refresh.</div>
         </div>
