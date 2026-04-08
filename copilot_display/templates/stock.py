@@ -31,6 +31,7 @@ Data schema
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
 
@@ -43,6 +44,8 @@ from copilot_display.templates.base import Template
 
 _FONT_PATH = "/usr/share/fonts/truetype/cascadia-code/CascadiaMono.ttf"
 _FONT_SIZE = 16
+
+logger = logging.getLogger("copilot_display.stock")
 
 DEFAULT_SYMBOLS = ["^IXIC", "^GSPC", "GC=F", "BZ=F"]
 
@@ -100,7 +103,8 @@ def fetch_quotes(symbols: list[str] | None = None) -> dict:
                     "change_pct": change_pct,
                 }
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to fetch %s: %s", sym, exc)
             continue
 
     if not stocks:
