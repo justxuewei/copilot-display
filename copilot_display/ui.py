@@ -864,6 +864,14 @@ html, body {
       </div>
       <div class="config-grid">
         <div class="config-card">
+          <div class="form-heading">Refresh template</div>
+          <div class="field">
+            <label>Active template</label>
+            <div id="cfg-template-display" style="padding:7px 9px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-dim);font-size:12px">—</div>
+          </div>
+          <div class="field-hint">Set via the Preview section. This template and its data will be used for background refresh.</div>
+        </div>
+        <div class="config-card">
           <div class="form-heading">Scheduling</div>
           <div class="field">
             <label>Scan interval (s) — 0 to disable</label>
@@ -873,6 +881,7 @@ html, body {
             <label>Refresh interval (s) — 0 to disable</label>
             <input type="number" id="cfg-refresh_interval" min="0" step="1" placeholder="300">
           </div>
+        </div>
         </div>
         <div class="config-card">
           <div class="form-heading">Work hours</div>
@@ -1462,6 +1471,8 @@ async function saveTemplateState() {
   }
   _savedConfig.template = name;
   _savedConfig.template_data = template_data;
+  const el = document.getElementById('cfg-template-display');
+  if (el) { el.textContent = name; el.style.color = 'var(--text)'; }
   await api('/api/config', {
     method: 'PATCH',
     body: JSON.stringify({ template: name, template_data }),
@@ -1487,6 +1498,10 @@ async function loadConfig() {
     document.getElementById('cfg-refresh_interval').value = _savedConfig.refresh_interval ?? 300;
     document.getElementById('cfg-work_start').value       = _savedConfig.work_start       ?? '';
     document.getElementById('cfg-work_end').value         = _savedConfig.work_end         ?? '';
+    const tmpl = _savedConfig.template;
+    const el = document.getElementById('cfg-template-display');
+    el.textContent = tmpl || '—';
+    el.style.color = tmpl ? 'var(--text)' : 'var(--text-faint)';
   } catch {}
 }
 
