@@ -295,3 +295,10 @@ X-API-Token: <token>
 | Scanner during connect | kept alive (CoreBluetooth peripheral ref) | stopped before connect (BlueZ limitation) |
 
 The server selects the correct protocol and timing automatically.
+
+## Credits / Thanks
+
+Special thanks to the following open-source projects for their excellent work and reference implementations of the protocols used to communicate with these types of e-ink displays:
+
+- [yihong0618/bbtag](https://github.com/yihong0618/bbtag)
+- [fuergaosi233/cc-usage-elink](https://github.com/fuergaosi233/cc-usage-elink)
