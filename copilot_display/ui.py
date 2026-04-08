@@ -1570,6 +1570,8 @@ async function loadRefreshStatus() {
     const nextEl = document.getElementById('stat-next-refresh');
     if (data.next_refresh_in === null || data.next_refresh_in === undefined) {
       nextEl.textContent = 'off';
+    } else if (data.is_work_time === false) {
+      nextEl.textContent = 'PAUSED';
     } else {
       _countdownSecs = data.next_refresh_in;
       _tickCountdown();
