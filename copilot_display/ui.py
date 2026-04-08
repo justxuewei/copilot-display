@@ -742,6 +742,8 @@ html, body {
             <label>Type</label>
             <select id="tmpl-select"></select>
           </div>
+          <button class="btn btn-ghost btn-full" id="btn-set-active">Set as active for refresh</button>
+          <div class="field-hint" id="set-active-note" style="min-height:14px"></div>
         </div>
 
         <!-- Dynamic fields -->
@@ -1478,6 +1480,18 @@ async function saveTemplateState() {
     body: JSON.stringify({ template: name, template_data }),
   }).catch(() => {});
 }
+
+document.getElementById('btn-set-active').addEventListener('click', async () => {
+  const btn  = document.getElementById('btn-set-active');
+  const note = document.getElementById('set-active-note');
+  btn.disabled = true;
+  note.textContent = '';
+  await saveTemplateState();
+  note.textContent = '✓ Saved as active template';
+  note.style.color = 'var(--green-hi)';
+  setTimeout(() => { note.textContent = ''; }, 3000);
+  btn.disabled = false;
+});
 
 // Save on any field change within the form panel (debounced)
 let _tmplSaveTimer = null;
