@@ -180,7 +180,8 @@ async def preview_stocks(req: PushStocksRequest | None = None):
 
     try:
         data = fetch_quotes(symbols)
-    except RuntimeError as exc:
+    except Exception as exc:
+        logger.exception("Failed to fetch stock quotes for %s", symbols)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     tmpl = templates.get("stock")
@@ -235,7 +236,8 @@ async def push_stocks(req: PushStocksRequest | None = None):
 
     try:
         data = fetch_quotes(symbols)
-    except RuntimeError as exc:
+    except Exception as exc:
+        logger.exception("Failed to fetch stock quotes for %s", symbols)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     tmpl = templates.get("stock")
