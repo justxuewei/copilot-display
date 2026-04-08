@@ -316,7 +316,7 @@ async def get_config():
 @app.patch("/api/config")
 async def patch_config(updates: dict[str, Any]):
     """Update one or more config keys and persist to disk."""
-    global _refresh_task
+    global _refresh_task, _next_refresh_at
     config = store.load_config()
     config.update(updates)
     store.save_config(config)
@@ -329,9 +329,11 @@ async def patch_config(updates: dict[str, Any]):
                 pass
         new_interval = updates["refresh_interval"]
         if new_interval > 0:
+            _next_refresh_at = datetime.now() + timedelta(seconds=new_interval)
             _refresh_task = asyncio.create_task(_background_refresh(new_interval))
             logger.info("Background refresh restarted (interval=%ds)", new_interval)
         else:
+            _next_refresh_at = None
             _refresh_task = None
             logger.info("Background refresh disabled")
     return config
