@@ -9,7 +9,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 _DEVICES_FILE = "devices.json"
-_CONFIG_FILE = "config.json"
+_CONFIG_FILE  = "config.json"
+_STATE_FILE   = "state.json"
 
 _DEFAULT_CONFIG: dict = {
     "scan_interval": 60,     # seconds between BLE device scans (0 = disabled)
@@ -68,3 +69,22 @@ class DataStore:
             path.write_text(json.dumps(config, indent=2))
         except Exception:
             logger.warning("Failed to save config to %s", path, exc_info=True)
+
+    # ── Runtime state ─────────────────────────────────────────────────────────
+
+    def load_state(self) -> dict:
+        path = self.data_dir / _STATE_FILE
+        if not path.exists():
+            return {}
+        try:
+            return json.loads(path.read_text())
+        except Exception:
+            logger.warning("Failed to read %s, ignoring", path, exc_info=True)
+            return {}
+
+    def save_state(self, state: dict) -> None:
+        path = self.data_dir / _STATE_FILE
+        try:
+            path.write_text(json.dumps(state))
+        except Exception:
+            logger.warning("Failed to save state to %s", path, exc_info=True)
