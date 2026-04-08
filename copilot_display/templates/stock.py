@@ -39,7 +39,7 @@ from PIL import Image, ImageDraw, ImageFont
 from copilot_display.render import COLOR_MAP, SCREEN_H, SCREEN_W
 from copilot_display.templates.base import Template
 
-_FONT_PATH = "/usr/share/fonts/truetype/firacode/FiraCode-Regular.ttf"
+_FONT_PATH = "/usr/share/fonts/truetype/firacode/FiraCode-Bold.ttf"
 _FONT_SIZE = 16
 
 
