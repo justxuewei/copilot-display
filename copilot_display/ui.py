@@ -905,11 +905,12 @@ document.querySelectorAll('.nav-item').forEach(item => {
 const TMPL_EXAMPLES = {
   stock: JSON.stringify({
     stocks: [
-      { symbol: "AAPL",  price: 189.30, change:  1.20, change_pct:  0.64 },
-      { symbol: "TSLA",  price: 242.50, change: -3.10, change_pct: -1.26 },
-      { symbol: "GOOGL", price: 175.80, change:  0.45, change_pct:  0.26 },
-      { symbol: "MSFT",  price: 420.12, change: -2.30, change_pct: -0.54 },
-      { symbol: "AMZN",  price: 178.45, change:  0.85, change_pct:  0.48 },
+      { symbol: "AAPL",  low: 185.00, price:   189.30, high:   195.00, change_pct:  0.75 },
+      { symbol: "TSLA",  low: 238.10, price:   242.50, high:   251.80, change_pct: -1.26 },
+      { symbol: "GOOGL", low: 172.40, price:   175.80, high:   178.20, change_pct:  0.26 },
+      { symbol: "MSFT",  low: 415.30, price:   420.12, high:   424.00, change_pct: -0.54 },
+      { symbol: "AMZN",  low: 175.00, price:   178.45, high:   181.90, change_pct:  0.48 },
+      { symbol: "BRK-B", low: 9800.0, price: 10000.20, high: 10200.00, change_pct: -0.30 },
     ],
     updated_at: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
   }, null, 2),
