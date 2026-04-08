@@ -40,9 +40,10 @@ from PIL import Image, ImageDraw, ImageFont
 import yfinance as yf
 
 from copilot_display.render import COLOR_MAP, SCREEN_H, SCREEN_W
+from pathlib import Path
 from copilot_display.templates.base import Template
 
-_FONT_PATH = "/usr/share/fonts/truetype/cascadia-code/CascadiaMono.ttf"
+_FONT_PATH = str(Path(__file__).parent.parent / "fonts" / "CascadiaMono.ttf")
 _FONT_SIZE = 16
 
 logger = logging.getLogger("copilot_display.stock")
