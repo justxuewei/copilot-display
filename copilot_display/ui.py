@@ -885,12 +885,25 @@ html, body {
       </div>
       <div class="config-grid">
         <div class="config-card">
+          <div class="form-heading">Refresh status</div>
+          <div class="two-col">
+            <div class="stat-card">
+              <span class="stat-label">Last updated</span>
+              <span class="stat-value" id="stat-last-refresh" style="font-size:18px">—</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Next update</span>
+              <span class="stat-value" id="stat-next-refresh" style="font-size:18px">—</span>
+            </div>
+          </div>
+        </div>
+        <div class="config-card">
           <div class="form-heading">Refresh template</div>
           <div class="field">
             <label>Active template</label>
             <div id="cfg-template-display" style="padding:7px 9px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-dim)">—</div>
           </div>
-          <div class="field-hint">Set via the Preview section. This template and its data will be used for background refresh.</div>
+          <div class="field-hint">Set via the Template section. This template and its data will be used for background refresh.</div>
         </div>
         <div class="config-card">
           <div class="form-heading">Scheduling</div>
@@ -902,7 +915,6 @@ html, body {
             <label>Refresh interval (s) — 0 to disable</label>
             <input type="number" id="cfg-refresh_interval" min="0" step="1" placeholder="300">
           </div>
-        </div>
         </div>
         <div class="config-card">
           <div class="form-heading">Work hours</div>
@@ -1017,7 +1029,7 @@ document.querySelectorAll('.nav-item').forEach(item => {
     const t = item.dataset.target;
     if (t === 'devices') loadDevices();
     if (t === 'health') { clearTimeout(healthTimer); refreshHealth(); }
-    if (t === 'settings') loadConfig();
+    if (t === 'settings') { loadConfig(); loadRefreshStatus(); }
   });
 });
 
@@ -1534,6 +1546,45 @@ document.querySelector('.form-panel').addEventListener('input', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // Settings section
 // ═══════════════════════════════════════════════════════════════════════════
+let _countdownTimer = null;
+let _countdownSecs = null;
+
+async function loadRefreshStatus() {
+  try {
+    const res = await api('/api/health');
+    if (!res.ok) return;
+    const data = await res.json();
+
+    const lastEl = document.getElementById('stat-last-refresh');
+    if (data.last_refresh) {
+      const d = new Date(data.last_refresh);
+      lastEl.textContent = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    } else {
+      lastEl.textContent = 'never';
+    }
+
+    clearInterval(_countdownTimer);
+    const nextEl = document.getElementById('stat-next-refresh');
+    if (data.next_refresh_in === null || data.next_refresh_in === undefined) {
+      nextEl.textContent = 'off';
+    } else {
+      _countdownSecs = data.next_refresh_in;
+      _tickCountdown();
+      _countdownTimer = setInterval(_tickCountdown, 1000);
+    }
+  } catch {}
+}
+
+function _tickCountdown() {
+  const el = document.getElementById('stat-next-refresh');
+  if (!el) { clearInterval(_countdownTimer); return; }
+  if (_countdownSecs <= 0) { el.textContent = 'soon…'; _countdownSecs = 0; return; }
+  const m = Math.floor(_countdownSecs / 60);
+  const s = _countdownSecs % 60;
+  el.textContent = m > 0 ? `${m}m ${String(s).padStart(2,'0')}s` : `${s}s`;
+  _countdownSecs--;
+}
+
 async function loadConfig() {
   try {
     const res = await api('/api/config');
@@ -1598,6 +1649,7 @@ function esc(s) {
 (async () => {
   // Load config first so _savedConfig is ready before buildForm restores template fields
   await loadConfig();
+  loadRefreshStatus();
   await loadTemplates();
   await loadDeviceDropdown();
   refreshHealth();
