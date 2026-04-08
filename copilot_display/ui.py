@@ -39,7 +39,7 @@ html, body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.5;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
@@ -67,7 +67,7 @@ html, body {
 }
 
 .logo {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -86,7 +86,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   color: var(--text-dim);
 }
@@ -115,7 +115,7 @@ html, body {
   padding: 3px 9px;
   border: 1px solid var(--border2);
   border-radius: 20px;
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: 0.06em;
   color: var(--text-dim);
   background: var(--surface2);
@@ -133,7 +133,7 @@ html, body {
 }
 
 .nav-section-label {
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -146,7 +146,7 @@ html, body {
   align-items: center;
   gap: 9px;
   padding: 8px 14px;
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-weight: 600;
@@ -166,7 +166,7 @@ html, body {
 .nav-icon {
   width: 16px;
   text-align: center;
-  font-size: 15px;
+  font-size: 12px;
   flex-shrink: 0;
   opacity: 0.7;
 }
@@ -175,7 +175,7 @@ html, body {
 .sidebar-footer {
   margin-top: auto;
   padding: 12px 14px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-faint);
   letter-spacing: 0.06em;
   border-top: 1px solid var(--border);
@@ -221,7 +221,7 @@ html, body {
 .form-section:last-child { border-bottom: none; }
 
 .form-heading {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -231,7 +231,7 @@ html, body {
 .field { display: flex; flex-direction: column; gap: 4px; }
 
 .field label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -247,7 +247,7 @@ html, body {
   border-radius: var(--radius);
   padding: 7px 9px;
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text);
   outline: none;
   width: 100%;
@@ -277,7 +277,7 @@ html, body {
   border: none;
   border-radius: var(--radius);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -326,7 +326,7 @@ html, body {
   top: -22px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -400,7 +400,7 @@ html, body {
   gap: 10px;
   background: #ddd8c4;
   color: #aaa89a;
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -409,7 +409,7 @@ html, body {
 .bezel-info {
   text-align: center;
   margin-top: 10px;
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #3a3a44;
@@ -428,7 +428,7 @@ html, body {
   gap: 5px;
   padding: 4px 10px;
   border-radius: 3px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -452,7 +452,7 @@ html, body {
 @keyframes pulse-dot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.5);opacity:0.6} }
 
 .task-id-label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-faint);
   letter-spacing: 0.04em;
 }
@@ -463,7 +463,7 @@ html, body {
   background: var(--accent-lo);
   border: 1px solid var(--accent-dim);
   border-radius: var(--radius);
-  font-size: 13px;
+  font-size: 12px;
   color: #f0a090;
   line-height: 1.5;
 }
@@ -483,7 +483,7 @@ html, body {
   flex-shrink: 0;
 }
 .section-hdr-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -506,17 +506,17 @@ html, body {
 .spinner.active { display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.scan-label { font-size: 12px; color: var(--text-dim); display: none; }
+.scan-label { font-size: 11px; color: var(--text-dim); display: none; }
 .scan-label.active { display: inline; }
 
 .device-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12px;
 }
 .device-table th {
   padding: 7px 10px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -532,13 +532,13 @@ html, body {
 }
 .device-table tr:last-child td { border-bottom: none; }
 .device-table tbody tr:hover td { background: var(--surface2); }
-.device-table .addr-cell { color: var(--text-dim); font-size: 12px; }
+.device-table .addr-cell { color: var(--text-dim); font-size: 11px; }
 
 .empty-row td {
   text-align: center;
   padding: 32px;
   color: var(--text-faint);
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.08em;
 }
 
@@ -582,14 +582,14 @@ html, body {
 .stat-card:hover { border-color: var(--border2); }
 
 .stat-label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--text-faint);
 }
 .stat-value {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 400;
   font-family: var(--mono);
   color: var(--text);
@@ -600,7 +600,7 @@ html, body {
 .stat-value.hi  { color: var(--yellow); }
 
 .refresh-note {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-faint);
   letter-spacing: 0.06em;
 }
@@ -631,7 +631,7 @@ html, body {
 }
 
 .field-hint {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-faint);
   line-height: 1.6;
   letter-spacing: 0.04em;
@@ -646,7 +646,7 @@ html, body {
   background: var(--bg);
   color: var(--text-faint);
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -657,7 +657,7 @@ html, body {
 .day-btn.on { background: var(--accent-lo); border-color: var(--accent); color: var(--accent-hi); }
 
 .config-note {
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: 0.06em;
   min-height: 16px;
 }
@@ -685,14 +685,14 @@ html, body {
   gap: 14px;
 }
 .auth-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--accent-hi);
 }
 .auth-sub {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-dim);
   line-height: 1.6;
 }
@@ -701,11 +701,11 @@ html, body {
   padding: 1px 5px;
   border-radius: 3px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text);
 }
 .auth-err {
-  font-size: 13px;
+  font-size: 12px;
   color: #f0a090;
   display: none;
 }
@@ -731,7 +731,10 @@ html, body {
   <!-- ── Sidebar ── -->
   <nav class="sidebar">
     <span class="nav-section-label">Sections</span>
-    <div class="nav-item active" data-target="preview">
+    <div class="nav-item active" data-target="settings">
+      <span class="nav-icon">⚙</span>Home
+    </div>
+    <div class="nav-item" data-target="preview">
       <span class="nav-icon">▤</span>Template
     </div>
     <div class="nav-item" data-target="devices">
@@ -740,9 +743,6 @@ html, body {
     <div class="nav-item" data-target="health">
       <span class="nav-icon">◎</span>Health
     </div>
-    <div class="nav-item" data-target="settings">
-      <span class="nav-icon">⚙</span>Settings
-    </div>
     <div class="sidebar-footer">BluTag 4.2″ · BLK/WHT/RED</div>
   </nav>
 
@@ -750,7 +750,7 @@ html, body {
   <main class="main">
 
     <!-- ╔══ Preview ══╗ -->
-    <section class="section active" id="section-preview">
+    <section class="section" id="section-preview">
 
       <div class="form-panel">
 
@@ -878,9 +878,9 @@ html, body {
     </section>
 
     <!-- ╔══ Settings ══╗ -->
-    <section class="section" id="section-settings">
+    <section class="section active" id="section-settings">
       <div class="section-hdr">
-        <span class="section-hdr-title">Settings</span>
+        <span class="section-hdr-title">Home</span>
         <button class="btn btn-primary" id="btn-save-config">Save</button>
       </div>
       <div class="config-grid">
@@ -888,7 +888,7 @@ html, body {
           <div class="form-heading">Refresh template</div>
           <div class="field">
             <label>Active template</label>
-            <div id="cfg-template-display" style="padding:7px 9px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-dim);font-size:12px">—</div>
+            <div id="cfg-template-display" style="padding:7px 9px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-dim)">—</div>
           </div>
           <div class="field-hint">Set via the Preview section. This template and its data will be used for background refresh.</div>
         </div>
@@ -1597,10 +1597,7 @@ function esc(s) {
 // ═══════════════════════════════════════════════════════════════════════════
 (async () => {
   // Load config first so _savedConfig is ready before buildForm restores template fields
-  try {
-    const res = await api('/api/config');
-    if (res.ok) _savedConfig = await res.json();
-  } catch {}
+  await loadConfig();
   await loadTemplates();
   await loadDeviceDropdown();
   refreshHealth();
