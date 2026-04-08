@@ -206,6 +206,7 @@ async def health():
     next_refresh_in: int | None = None
     if _next_refresh_at is not None:
         next_refresh_in = max(0, int((_next_refresh_at - datetime.now()).total_seconds()))
+    config = store.load_config()
     return {
         "status": "ok",
         "version": __version__,
@@ -213,6 +214,7 @@ async def health():
         "queue_depth": _queue.qsize(),
         "last_refresh": _last_refresh.isoformat() if _last_refresh else None,
         "next_refresh_in": next_refresh_in,
+        "is_work_time": _is_work_time(config),
     }
 
 
