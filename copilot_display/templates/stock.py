@@ -119,6 +119,12 @@ def fetch_quotes(symbols: list[str] | None = None) -> dict:
 class StockTemplate(Template):
     name = "stock"
 
+    def fetch(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Extract ticker symbols from data and fetch live quotes."""
+        symbols = [data.get(f"sym{i}") for i in range(1, 5)]
+        symbols = [s for s in symbols if s] or DEFAULT_SYMBOLS
+        return fetch_quotes(symbols)
+
     def render(self, data: dict[str, Any]) -> Image.Image:
         stocks = data.get("stocks")
         if not stocks:
