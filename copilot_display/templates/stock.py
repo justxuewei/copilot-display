@@ -1,10 +1,17 @@
 """Stock watchlist template for the tri-color e-ink display.
 
-Row format:
-    AAPL  [████░░░░░░]  189.30  +0.75%
-    CODE   progress bar   LAST   CHG%
+Renders a pre-formatted box-drawing text block using Fira Code (monospace),
+centered on the 400×300 image.
 
-Header uses the same fixed font size as data rows (red, no divider).
+    ┌─────────────────────────────────────┐
+    │ Copilot Display                     │
+    ├─────────────────────────────────────┤
+    │ AAPL              10000.01(+12.43%) │
+    │ [░░░░░░░░█░░░░░░░░░░░░░░░░░░░░░░░░] │
+    ├─────────────────────────────────────┤
+    │ TSLA                242.50(-1.26%)  │
+    │ [░░░░░░░░░░░░░░░░░░░░█░░░░░░░░░░░░] │
+    └─────────────────────────────────────┘
 
 Data schema
 -----------
@@ -12,14 +19,14 @@ Data schema
     "stocks": [
         {
             "symbol":     "AAPL",
-            "low":        185.00,   # day low  (used for bar position)
-            "price":      189.30,   # current / last price
-            "high":       195.00,   # day high (used for bar position)
-            "change_pct": 0.75      # optional  (+0.75 means +0.75%)
+            "low":        185.00,
+            "price":      189.30,
+            "high":       195.00,
+            "change_pct": 0.75      # optional
         },
         ...
     ],
-    "updated_at": "14:32"           # optional — defaults to current HH:MM
+    "updated_at": "14:32"           # optional — shown in header as "at HH:MM"
 }
 """
 from __future__ import annotations
@@ -27,19 +34,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
-from copilot_display.render import COLOR_MAP, PADDING_X, PADDING_Y, SCREEN_H, SCREEN_W, load_font
+from copilot_display.render import COLOR_MAP, SCREEN_H, SCREEN_W
 from copilot_display.templates.base import Template
 
-# ── Fixed layout constants ────────────────────────────────────────────────────
-_FONT_SIZE      = 13
-_BAR_LEFT       = 75               # bar left edge (55 px code slot + gap)
-_BAR_W          = 55               # bar width
-_BAR_RIGHT      = _BAR_LEFT + _BAR_W   # 130
-_X_PRICE_RIGHT  = 252              # price right-aligned here
-_X_RIGHT        = SCREEN_W - PADDING_X  # 380  (change% + timestamp)
-_BAR_H          = 5                # bar rectangle height
+_FONT_PATH = "/usr/share/fonts/truetype/firacode/FiraCode-Regular.ttf"
+_FONT_SIZE = 16
 
 
 class StockTemplate(Template):
@@ -53,81 +54,70 @@ class StockTemplate(Template):
 
         img  = Image.new("RGB", (SCREEN_W, SCREEN_H), COLOR_MAP["white"])
         draw = ImageDraw.Draw(img)
+        font = ImageFont.truetype(_FONT_PATH, _FONT_SIZE)
 
-        font   = load_font(_FONT_SIZE)
-        line_h = draw.textbbox((0, 0), "A", font=font)[3]
-        row_h  = line_h + 3
+        # Monospace char width — all glyphs same advance
+        char_w = draw.textbbox((0, 0), "X", font=font)[2]
 
-        # ── Timestamp (bottom-right, smaller font) ────────────────────────────
-        ts_font = load_font(10)
-        ts_h    = draw.textbbox((0, 0), "A", font=ts_font)[3]
-        ts_y    = SCREEN_H - PADDING_Y - ts_h
-        ts_w    = draw.textbbox((0, 0), updated_at, font=ts_font)[2]
-        draw.text((_X_RIGHT - ts_w, ts_y), updated_at,
-                  fill=COLOR_MAP["black"], font=ts_font)
+        # Box outer width in chars so the block fits with small margin
+        box_w = (SCREEN_W - 16) // char_w   # e.g. (400-16)//10 = 38
 
-        # ── How many rows fit above the timestamp ─────────────────────────────
-        available_h = ts_y - PADDING_Y - 2
-        max_rows    = available_h // row_h - 1   # -1 for header
+        # Find the max number of stocks whose rendered block fits vertically
+        for n in range(min(len(stocks), 6), 0, -1):
+            text = self._build(stocks[:n], box_w, updated_at)
+            bb   = draw.textbbox((0, 0), text, font=font)
+            if (bb[3] - bb[1]) <= SCREEN_H - 10:
+                break
 
-        y = PADDING_Y
+        # Center on canvas
+        x = (SCREEN_W - (bb[2] - bb[0])) // 2 - bb[0]
+        y = (SCREEN_H - (bb[3] - bb[1])) // 2 - bb[1]
+        draw.text((x, y), text, fill=COLOR_MAP["black"], font=font)
+        return img
 
-        # ── Header ───────────────────────────────────────────────────────────
-        red = COLOR_MAP["red"]
+    @staticmethod
+    def _build(stocks: list[dict], box_w: int, updated_at: str = "") -> str:
+        inner_w   = box_w - 2          # chars between corners
+        content_w = box_w - 4          # chars between "│ " and " │"
+        bar_inner = content_w - 2      # chars inside [ ]
 
-        draw.text((PADDING_X, y), "CODE", fill=red, font=font)
+        def row(content: str) -> str:
+            return f"│ {content:<{content_w}} │"
 
-        # empty bar outline
-        bt = y + (line_h - _BAR_H) // 2
-        draw.rectangle([_BAR_LEFT, bt, _BAR_RIGHT, bt + _BAR_H - 1],
-                       outline=COLOR_MAP["black"])
+        lines: list[str] = []
+        ts = f"at {updated_at}" if updated_at else ""
+        title = "Copilot Display"
+        header = f"{title}{ts:>{content_w - len(title)}}"
+        lines.append("┌" + "─" * inner_w + "┐")
+        lines.append(row(header))
 
-        last_w = draw.textbbox((0, 0), "LAST", font=font)[2]
-        draw.text((_X_PRICE_RIGHT - last_w, y), "LAST", fill=red, font=font)
+        for i, stock in enumerate(stocks):
+            lines.append("├" + "─" * inner_w + "┤")
 
-        chg_w = draw.textbbox((0, 0), "CHG%", font=font)[2]
-        draw.text((_X_RIGHT - chg_w, y), "CHG%", fill=red, font=font)
-
-        y += row_h
-
-        # ── Data rows ─────────────────────────────────────────────────────────
-        for stock in stocks[:max_rows]:
             symbol     = str(stock.get("symbol", "?")).upper()
             price      = float(stock["price"])
             low        = float(stock.get("low", price))
             high       = float(stock.get("high", price))
             change_pct = stock.get("change_pct")
 
-            # Symbol
-            draw.text((PADDING_X, y), symbol,
-                      fill=COLOR_MAP["black"], font=font)
+            price_str = f"{price:,.2f}"
+            if change_pct is not None:
+                sign  = "+" if float(change_pct) >= 0 else ""
+                right = f"{price_str}({sign}{float(change_pct):.2f}%)"
+            else:
+                right = price_str
+
+            # Truncate symbol if price string leaves no room
+            sym_w = content_w - len(right)
+            sym   = symbol[:max(0, sym_w)].ljust(max(0, sym_w))
+            lines.append(f"│ {sym}{right} │")
 
             # Progress bar
-            bt     = y + (line_h - _BAR_H) // 2
-            pos    = (price - low) / (high - low) if high > low else 0.0
-            pos    = max(0.0, min(1.0, pos))
-            filled = max(1, round(pos * _BAR_W))
+            pos = (price - low) / (high - low) if high > low else 0.5
+            pos = max(0.0, min(1.0, pos))
+            idx = max(0, min(bar_inner - 1, round(pos * (bar_inner - 1))))
+            bar = "[" + "░" * idx + "█" + "░" * (bar_inner - 1 - idx) + "]"
+            lines.append(row(bar))
 
-            draw.rectangle([_BAR_LEFT, bt, _BAR_LEFT + filled - 1, bt + _BAR_H - 1],
-                           fill=COLOR_MAP["black"])
-            if filled < _BAR_W:
-                draw.rectangle([_BAR_LEFT + filled, bt, _BAR_RIGHT, bt + _BAR_H - 1],
-                               outline=COLOR_MAP["black"])
-
-            # Current price (always 2 dp, right-aligned)
-            price_str = f"{price:,.2f}"
-            pw        = draw.textbbox((0, 0), price_str, font=font)[2]
-            draw.text((_X_PRICE_RIGHT - pw, y), price_str,
-                      fill=COLOR_MAP["black"], font=font)
-
-            # Change % (right-aligned, red if loss)
-            if change_pct is not None:
-                sign   = "+" if float(change_pct) >= 0 else ""
-                chg    = f"{sign}{float(change_pct):.2f}%"
-                color  = COLOR_MAP["red"] if float(change_pct) < 0 else COLOR_MAP["black"]
-                cw     = draw.textbbox((0, 0), chg, font=font)[2]
-                draw.text((_X_RIGHT - cw, y), chg, fill=color, font=font)
-
-            y += row_h
-
-        return img
+        lines.append("└" + "─" * inner_w + "┘")
+        return "\n".join(lines)
