@@ -46,6 +46,7 @@ store = DataStore(settings.data_dir)
 # Task queue and state store
 _queue: asyncio.Queue = asyncio.Queue()
 _tasks: dict[str, dict[str, Any]] = {}
+_last_refresh: datetime | None = None
 
 
 async def _background_scan(interval: int) -> None:
@@ -88,6 +89,7 @@ def _is_work_time(config: dict) -> bool:
 
 
 async def _do_refresh() -> None:
+    global _last_refresh
     config = store.load_config()
     if not _is_work_time(config):
         logger.info("Refresh skipped: outside work hours/days")
@@ -112,6 +114,7 @@ async def _do_refresh() -> None:
     task_id = str(uuid.uuid4())
     _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
     await _queue.put((task_id, img, device))
+    _last_refresh = datetime.now()
     logger.info("Enqueued refresh task %s (template=%s)", task_id, template_name)
 
 
@@ -170,11 +173,23 @@ async def auth_middleware(request: Request, call_next):
 
 @app.get("/api/health")
 async def health():
+    config = store.load_config()
+    refresh_interval = config.get("refresh_interval", 0)
+    next_refresh_in: int | None = None
+    if refresh_interval > 0:
+        if _last_refresh:
+            elapsed = (datetime.now() - _last_refresh).total_seconds()
+            next_refresh_in = max(0, int(refresh_interval - elapsed))
+        else:
+            next_refresh_in = refresh_interval
     return {
         "status": "ok",
         "version": __version__,
         "devices": len(get_cached_devices()),
         "queue_depth": _queue.qsize(),
+        "last_refresh": _last_refresh.isoformat() if _last_refresh else None,
+        "next_refresh_in": next_refresh_in,
+        "refresh_interval": refresh_interval,
     }
 
 
