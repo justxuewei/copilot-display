@@ -270,6 +270,10 @@ class StockTemplate(Template):
             change_pct  = stock.get("change_pct")
             price_label = str(stock.get("price_label") or "")
 
+            # Append (PRE)/(POST) label to symbol when in extended hours
+            if price_label:
+                symbol = f"{symbol}({price_label})"
+
             price_str = f"{price:,.2f}"
             if change_pct is not None:
                 sign  = "+" if float(change_pct) >= 0 else ""
@@ -282,13 +286,11 @@ class StockTemplate(Template):
             sym   = symbol[:max(0, sym_w)].ljust(max(0, sym_w))
             lines.append(f"│ {sym}{right} │")
 
-            # Progress bar — append price_label (e.g. "PRE") inside brackets
+            # Progress bar
             pos = (price - low) / (high - low) if high > low else 0.5
             pos = max(0.0, min(1.0, pos))
-            label_suffix = f" {price_label}" if price_label else ""
-            bar_usable = bar_inner - len(label_suffix)
-            idx = max(0, min(bar_usable - 1, round(pos * (bar_usable - 1))))
-            bar = "[" + "=" * idx + "█" + "=" * (bar_usable - 1 - idx) + label_suffix + "]"
+            idx = max(0, min(bar_inner - 1, round(pos * (bar_inner - 1))))
+            bar = "[" + "=" * idx + "█" + "=" * (bar_inner - 1 - idx) + "]"
             lines.append(row(bar))
 
         lines.append("└" + "─" * inner_w + "┘")
