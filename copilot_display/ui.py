@@ -1057,13 +1057,7 @@ function buildForm(name) {
   document.getElementById('btn-preview').textContent = (name === 'stock') ? 'Fetch & Preview' : 'Preview';
 
   const fields = TMPL_FIELDS[name];
-  if (!fields) {
-    const wrap = makeField('Data (JSON)', 'raw-json', 'textarea', '');
-    const ta = wrap.querySelector('textarea');
-    ta.value = TMPL_EXAMPLES[name] || '{}';
-    ta.style.minHeight = '220px';
-    container.appendChild(wrap);
-  } else if (name === 'stock') {
+  if (name === 'stock') {
     const wrap = makeField('Ticker symbols', 'f_symbols', 'text', '^IXIC,^GSPC,GC=F,BZ=F', false);
     const input = wrap.querySelector('input');
     input.style.width = '100%';
@@ -1071,6 +1065,12 @@ function buildForm(name) {
     hint.style.cssText = 'font-size:11px;color:#888;margin-top:4px';
     hint.textContent = 'Comma-separated codes. Append (top) to always show a ticker (e.g. "UNH(top),^IXIC,AAPL"). If > 4 codes, top 4 by abs change are shown.';
     wrap.appendChild(hint);
+    container.appendChild(wrap);
+  } else if (!fields) {
+    const wrap = makeField('Data (JSON)', 'raw-json', 'textarea', '');
+    const ta = wrap.querySelector('textarea');
+    ta.value = TMPL_EXAMPLES[name] || '{}';
+    ta.style.minHeight = '220px';
     container.appendChild(wrap);
   } else {
     const selects = fields.filter(f => f.type === 'select');
