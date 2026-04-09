@@ -51,6 +51,11 @@ _last_scan:       datetime | None = None
 _next_refresh_at: datetime | None = None
 _refresh_task:    asyncio.Task | None = None
 
+# Statuses that indicate a task has reached a terminal state.
+# Includes "ok" (legacy: was returned by push_image before the ble_status rename)
+# and "error" as defensive catches for any unexpected values.
+_TERMINAL_STATUSES = {"done", "failed", "ok", "error"}
+
 
 def _load_timestamps() -> None:
     global _last_refresh, _last_scan
@@ -118,7 +123,7 @@ async def _task_cleanup_worker() -> None:
         cutoff = datetime.now() - timedelta(hours=24)
         stale = [
             tid for tid, info in _tasks.items()
-            if info.get("status") in ("done", "failed")
+            if info.get("status") in _TERMINAL_STATUSES
             and info.get("completed_at")
             and datetime.fromisoformat(info["completed_at"]) < cutoff
         ]
@@ -447,7 +452,7 @@ async def delete_done_tasks():
     """Remove all finished (done/failed) tasks from the queue history."""
     logger.info("delete_done_tasks: total tasks=%d, statuses=%s",
                 len(_tasks), {tid: info.get("status") for tid, info in _tasks.items()})
-    stale = [tid for tid, info in _tasks.items() if info.get("status") in ("done", "failed")]
+    stale = [tid for tid, info in _tasks.items() if info.get("status") in _TERMINAL_STATUSES]
     logger.info("delete_done_tasks: removing %d stale task(s): %s", len(stale), stale)
     for tid in stale:
         del _tasks[tid]
