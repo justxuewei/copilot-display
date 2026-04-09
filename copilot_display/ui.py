@@ -1162,6 +1162,13 @@ function buildForm(name) {
 
   document.getElementById('btn-preview').textContent = (name === 'stock') ? 'Fetch & Preview' : 'Preview';
 
+  // Stock template pushes fresh data server-side, so no preview required.
+  if (name === 'stock') {
+    lastPreviewPayload = { _stockPush: true, symbols: null };  // symbols resolved at push time
+    document.getElementById('btn-push').disabled = false;
+    setChip('', 'ready to push');
+  }
+
   const fields = TMPL_FIELDS[name];
   if (name === 'stock') {
     const wrap = makeField('Ticker symbols', 'f_symbols', 'text', '^IXIC,^GSPC,GC=F,BZ=F', false);
@@ -1269,9 +1276,12 @@ async function loadTemplates() {
 document.getElementById('tmpl-select').addEventListener('change', e => {
   saveTemplateState();
   buildForm(e.target.value);
-  lastPreviewPayload = null;
-  document.getElementById('btn-push').disabled = true;
-  setChip('', 'idle');
+  // buildForm sets push state for stock; reset only for non-stock templates.
+  if (e.target.value !== 'stock') {
+    lastPreviewPayload = null;
+    document.getElementById('btn-push').disabled = true;
+    setChip('', 'idle');
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1387,7 +1397,7 @@ document.getElementById('btn-push').addEventListener('click', async () => {
       // Use the stocks push endpoint
       res = await api('/api/push/stocks', {
         method: 'POST',
-        body: JSON.stringify({ symbols: lastPreviewPayload.symbols, ...(device ? { device } : {}) }),
+        body: JSON.stringify({ symbols: lastPreviewPayload.symbols ?? (document.getElementById('f_symbols')?.value || '').split(',').map(s => s.trim()).filter(Boolean), ...(device ? { device } : {}) }),
       });
     } else {
       const payload = { ...lastPreviewPayload, ...(device ? { device } : {}) };
@@ -1745,14 +1755,23 @@ document.getElementById('btn-set-active').addEventListener('click', async () => 
 });
 
 // Save on any field change within the form panel (debounced)
-// Also reset push button so user must re-preview after changing inputs.
+// Reset push button on input change so user must re-preview (non-stock templates only).
+// For stock template, keep the button enabled and update symbols in the payload live.
 let _tmplSaveTimer = null;
 document.querySelector('.form-panel').addEventListener('input', () => {
   clearTimeout(_tmplSaveTimer);
   _tmplSaveTimer = setTimeout(saveTemplateState, 400);
-  lastPreviewPayload = null;
-  document.getElementById('btn-push').disabled = true;
-  setChip('', 'idle');
+  const name = document.getElementById('tmpl-select').value;
+  if (name === 'stock') {
+    // Keep push enabled; symbols are read from the input field at push time anyway.
+    if (lastPreviewPayload && lastPreviewPayload._stockPush) {
+      lastPreviewPayload = { _stockPush: true, symbols: null };
+    }
+  } else {
+    lastPreviewPayload = null;
+    document.getElementById('btn-push').disabled = true;
+    setChip('', 'idle');
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
