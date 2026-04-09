@@ -204,7 +204,6 @@ def _fetch_one(sym: str) -> dict | None:
                 # Recompute change percentage relative to regular close if overnight
                 change_pct = round((price - regular_price) / regular_price * 100, 2)
             
-            display_name = f"{display_name}(OVERNIGHT)"
             low = price - 10
             high = price + 10
 
