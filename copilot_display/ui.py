@@ -976,27 +976,31 @@ html, body {
       </div>
 
       <!-- Task queue -->
-      <div class="section-hdr" style="margin-top:8px">
-        <span class="section-hdr-title">Task queue</span>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span class="refresh-note" id="queue-refresh-note"></span>
-          <button class="btn btn-ghost" id="btn-queue-clear">Clear done</button>
-          <button class="btn btn-ghost" id="btn-queue-refresh">Refresh</button>
+      <div class="config-grid">
+        <div class="config-card">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div class="form-heading">Task queue</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="refresh-note" id="queue-refresh-note"></span>
+              <button class="btn btn-ghost" id="btn-queue-clear">Clear done</button>
+              <button class="btn btn-ghost" id="btn-queue-refresh">Refresh</button>
+            </div>
+          </div>
+          <table class="queue-table">
+            <thead>
+              <tr>
+                <th>Task ID</th>
+                <th>Status</th>
+                <th style="text-align:center">Queue pos</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody id="queue-tbody">
+              <tr class="empty-row"><td colspan="4">No tasks yet.</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
-      <table class="queue-table">
-        <thead>
-          <tr>
-            <th>Task ID</th>
-            <th>Status</th>
-            <th style="text-align:center">Queue pos</th>
-            <th>Detail</th>
-          </tr>
-        </thead>
-        <tbody id="queue-tbody">
-          <tr class="empty-row"><td colspan="4">No tasks yet.</td></tr>
-        </tbody>
-      </table>
 
       <!-- Scheduling & work hours -->
       <div class="section-hdr" style="margin-top:8px">
