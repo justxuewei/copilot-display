@@ -37,6 +37,8 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
+import requests
+from bs4 import BeautifulSoup
 import yfinance as yf
 
 from copilot_display.render import COLOR_MAP, SCREEN_H, SCREEN_W
@@ -91,6 +93,33 @@ def _parse_symbols(raw: list[str]) -> tuple[list[str], set[str]]:
     return clean, top
 
 
+def _fetch_yahoo_overnight(sym: str) -> tuple[float | None, float | None]:
+    """Scrape the active overnight price directly from Yahoo Finance."""
+    url = f"https://finance.yahoo.com/quote/{sym}/"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml"
+    }
+    price = None
+    change_pct = None
+    try:
+        r = requests.get(url, headers=headers, timeout=5)
+        soup = BeautifulSoup(r.text, 'html.parser')
+        badge = soup.find('span', class_=lambda c: c and 'OVERNIGHT' in c.split())
+        if badge and badge.parent:
+            price_span = badge.parent.find('span')
+            if price_span:
+                price = float(price_span.text.strip().replace(',', ''))
+        
+        pct_span = soup.find('span', attrs={"data-testid": "qsp-overnight-price-change-percent"})
+        if pct_span:
+            text = pct_span.text.strip().replace('(', '').replace(')', '').replace('%', '').replace('+', '')
+            change_pct = float(text)
+    except Exception as exc:
+        logger.warning("Overnight scrape failed for %s: %s", sym, exc)
+    return price, change_pct
+
+
 def _fetch_one(sym: str) -> dict | None:
     """Fetch a single ticker from Yahoo Finance. Returns None on failure."""
     try:
@@ -103,12 +132,27 @@ def _fetch_one(sym: str) -> dict | None:
         pre_price  = info.get("preMarketPrice")
         post_price = info.get("postMarketPrice")
 
+        overnight_scraped_pct: float | None = None
+
         if market_state == "PRE" and pre_price:
             price = pre_price
             price_label = "PRE"
         elif market_state in ("POST", "POSTPOST", "CLOSED") and post_price:
             price = post_price
             price_label = "POST"
+        elif market_state == "PREPRE":
+            # Attempt to scrape overnight Blue Ocean data
+            scraped_price, scraped_pct = _fetch_yahoo_overnight(sym)
+            if scraped_price is not None:
+                price = scraped_price
+                overnight_scraped_pct = scraped_pct
+                price_label = "O/N"
+            elif post_price:
+                price = post_price
+                price_label = ""
+            else:
+                price = regular_price
+                price_label = ""
         else:
             price = regular_price
             price_label = ""
@@ -144,6 +188,17 @@ def _fetch_one(sym: str) -> dict | None:
             change_pct = None
 
         display_name = _DISPLAY_NAMES.get(sym, sym)
+
+        if price_label == "O/N":
+            if overnight_scraped_pct is not None:
+                change_pct = overnight_scraped_pct
+            elif regular_price and regular_price != 0:
+                # Recompute change percentage relative to regular close if overnight
+                change_pct = round((price - regular_price) / regular_price * 100, 2)
+            
+            display_name = f"{display_name}(OVERNIGHT)"
+            low = price - 10
+            high = price + 10
 
         return {
             "symbol": display_name,
