@@ -103,12 +103,29 @@ async def _queue_worker() -> None:
 
         try:
             result = await push_image(img, device_address=device, on_progress=on_progress)
-            _tasks[task_id].update({"status": "done", **result})
+            _tasks[task_id].update({"status": "done", "completed_at": datetime.now().isoformat(), **result})
         except Exception as e:
             logger.exception("Task %s failed", task_id)
-            _tasks[task_id].update({"status": "failed", "error": str(e)})
+            _tasks[task_id].update({"status": "failed", "completed_at": datetime.now().isoformat(), "error": str(e)})
         finally:
             _queue.task_done()
+
+
+async def _task_cleanup_worker() -> None:
+    """Remove done/failed tasks older than 24 hours once per day."""
+    while True:
+        await asyncio.sleep(86_400)  # 24 h
+        cutoff = datetime.now() - timedelta(hours=24)
+        stale = [
+            tid for tid, info in _tasks.items()
+            if info.get("status") in ("done", "failed")
+            and info.get("completed_at")
+            and datetime.fromisoformat(info["completed_at"]) < cutoff
+        ]
+        for tid in stale:
+            del _tasks[tid]
+        if stale:
+            logger.info("Pruned %d stale task(s) from queue history", len(stale))
 
 
 def _is_work_time(config: dict) -> bool:
@@ -178,6 +195,7 @@ async def lifespan(app: FastAPI):
     logger.info("Config: %s", config)
     scan_interval = config.get("scan_interval", settings.scan_interval)
     worker_task = asyncio.create_task(_queue_worker())
+    cleanup_task = asyncio.create_task(_task_cleanup_worker())
     scan_task = None
     if scan_interval > 0:
         scan_task = asyncio.create_task(_background_scan(scan_interval))
@@ -194,7 +212,8 @@ async def lifespan(app: FastAPI):
     for t in filter(None, (scan_task, _refresh_task)):
         t.cancel()
     worker_task.cancel()
-    for t in filter(None, (scan_task, _refresh_task, worker_task)):
+    cleanup_task.cancel()
+    for t in filter(None, (scan_task, _refresh_task, worker_task, cleanup_task)):
         try:
             await t
         except asyncio.CancelledError:
@@ -429,6 +448,14 @@ async def get_task(task_id: str):
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"task_id": task_id, **task}
+
+
+@app.delete("/api/tasks/done", status_code=204)
+async def delete_done_tasks():
+    """Remove all finished (done/failed) tasks from the queue history."""
+    stale = [tid for tid, info in _tasks.items() if info.get("status") in ("done", "failed")]
+    for tid in stale:
+        del _tasks[tid]
 
 
 def main():

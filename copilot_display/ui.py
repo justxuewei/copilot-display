@@ -1576,18 +1576,11 @@ function renderQueue(tasks) {
   }).join('');
 }
 
-// Clear done/failed tasks from local view (server keeps them; we just hide them client-side)
-let _hiddenTaskIds = new Set();
-
 document.getElementById('btn-queue-clear').addEventListener('click', async () => {
   try {
-    const res = await api('/api/tasks');
+    const res = await api('/api/tasks/done', { method: 'DELETE' });
     if (!res.ok) return;
-    const tasks = await res.json();
-    tasks.filter(t => t.status === 'done' || t.status === 'failed')
-         .forEach(t => _hiddenTaskIds.add(t.task_id));
-    const visible = tasks.filter(t => !_hiddenTaskIds.has(t.task_id));
-    renderQueue(visible);
+    await loadQueue();
   } catch {}
 });
 
@@ -1752,10 +1745,14 @@ document.getElementById('btn-set-active').addEventListener('click', async () => 
 });
 
 // Save on any field change within the form panel (debounced)
+// Also reset push button so user must re-preview after changing inputs.
 let _tmplSaveTimer = null;
 document.querySelector('.form-panel').addEventListener('input', () => {
   clearTimeout(_tmplSaveTimer);
   _tmplSaveTimer = setTimeout(saveTemplateState, 400);
+  lastPreviewPayload = null;
+  document.getElementById('btn-push').disabled = true;
+  setChip('', 'idle');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
