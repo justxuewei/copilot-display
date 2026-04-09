@@ -1492,6 +1492,7 @@ function pollTask(id, onDone) {
         pollTask(id, onDone);
       } else {
         rearmPush();
+        loadQueue();  // refresh all queue positions now that this task finished
         if (task.status === 'done' && onDone) onDone();
       }
     } catch {
@@ -1598,7 +1599,7 @@ function renderQueue(tasks) {
       detail = channelProgressHTML(t) ||
         '<span style="color:var(--green-hi)">sent to device</span>';
     }
-    const pos = t.queue_position != null ? t.queue_position : 0;
+    const pos = t.queue_position == null ? '—' : t.queue_position === 0 ? '●' : t.queue_position;
     return `<tr>
       <td class="task-id-cell">${esc(shortId)}</td>
       <td><span class="status-chip ${esc(statusCls)}"><span class="dot"></span>${esc(statusLabel)}</span></td>
