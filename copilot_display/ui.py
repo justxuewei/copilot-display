@@ -469,7 +469,7 @@ html, body {
 }
 
 /* ── Devices section ─────────────────────────────────────────────────────── */
-#section-devices {
+#section-config {
   flex-direction: column;
   padding: 20px 24px;
   gap: 14px;
@@ -810,8 +810,8 @@ html, body {
     <div class="nav-item" data-target="preview">
       <span class="nav-icon">▤</span>Template
     </div>
-    <div class="nav-item" data-target="devices">
-      <span class="nav-icon">◈</span>Devices
+    <div class="nav-item" data-target="config">
+      <span class="nav-icon">◧</span>Config
     </div>
     <div class="sidebar-footer">BluTag 4.2″ · BLK/WHT/RED</div>
   </nav>
@@ -898,29 +898,52 @@ html, body {
       </div>
     </section>
 
-    <!-- ╔══ Devices ══╗ -->
-    <section class="section" id="section-devices">
+    <!-- ╔══ Config ══╗ -->
+    <section class="section" id="section-config">
       <div class="section-hdr">
-        <span class="section-hdr-title">Bluetooth devices</span>
-        <div class="scan-row">
-          <span class="spinner" id="scan-spinner"></span>
-          <span class="scan-label" id="scan-label">Scanning…</span>
-          <button class="btn btn-ghost" id="btn-scan">Scan</button>
+        <span class="section-hdr-title">Configuration</span>
+        <button class="btn btn-primary" id="btn-save-config">Save</button>
+      </div>
+      <div class="config-grid">
+        <div class="config-card">
+          <div class="form-heading">Scheduling</div>
+          <div class="field">
+            <label>Scan interval (s) — 0 to disable</label>
+            <input type="number" id="cfg-scan_interval" min="0" step="1" placeholder="60">
+          </div>
+          <div class="field">
+            <label>Refresh interval (s) — 0 to disable</label>
+            <input type="number" id="cfg-refresh_interval" min="0" step="1" placeholder="300">
+          </div>
+        </div>
+        <div class="config-card">
+          <div class="form-heading">Work hours</div>
+          <div class="field">
+            <label>Days</label>
+            <div class="day-picker" id="cfg-work_days">
+              <button type="button" class="day-btn" data-day="0">Mon</button>
+              <button type="button" class="day-btn" data-day="1">Tue</button>
+              <button type="button" class="day-btn" data-day="2">Wed</button>
+              <button type="button" class="day-btn" data-day="3">Thu</button>
+              <button type="button" class="day-btn" data-day="4">Fri</button>
+              <button type="button" class="day-btn" data-day="5">Sat</button>
+              <button type="button" class="day-btn" data-day="6">Sun</button>
+            </div>
+          </div>
+          <div class="two-col">
+            <div class="field">
+              <label>Start</label>
+              <input type="time" id="cfg-work_start">
+            </div>
+            <div class="field">
+              <label>End</label>
+              <input type="time" id="cfg-work_end">
+            </div>
+          </div>
+          <div class="field-hint">Outside work hours/days, background tasks are paused. Leave both times empty to always run.</div>
         </div>
       </div>
-      <table class="device-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Address</th>
-            <th>RSSI</th>
-            <th>Signal</th>
-          </tr>
-        </thead>
-        <tbody id="devices-tbody">
-          <tr class="empty-row"><td colspan="4">No devices cached — run a scan.</td></tr>
-        </tbody>
-      </table>
+      <span class="config-note" id="config-note"></span>
     </section>
 
     <!-- ╔══ Settings / Home ══╗ -->
@@ -1002,51 +1025,32 @@ html, body {
         </div>
       </div>
 
-      <!-- Scheduling & work hours -->
-      <div class="section-hdr" style="margin-top:8px">
-        <span class="section-hdr-title">Configuration</span>
-        <button class="btn btn-primary" id="btn-save-config">Save</button>
-      </div>
+      <!-- Devices -->
       <div class="config-grid">
         <div class="config-card">
-          <div class="form-heading">Scheduling</div>
-          <div class="field">
-            <label>Scan interval (s) — 0 to disable</label>
-            <input type="number" id="cfg-scan_interval" min="0" step="1" placeholder="60">
-          </div>
-          <div class="field">
-            <label>Refresh interval (s) — 0 to disable</label>
-            <input type="number" id="cfg-refresh_interval" min="0" step="1" placeholder="300">
-          </div>
-        </div>
-        <div class="config-card">
-          <div class="form-heading">Work hours</div>
-          <div class="field">
-            <label>Days</label>
-            <div class="day-picker" id="cfg-work_days">
-              <button type="button" class="day-btn" data-day="0">Mon</button>
-              <button type="button" class="day-btn" data-day="1">Tue</button>
-              <button type="button" class="day-btn" data-day="2">Wed</button>
-              <button type="button" class="day-btn" data-day="3">Thu</button>
-              <button type="button" class="day-btn" data-day="4">Fri</button>
-              <button type="button" class="day-btn" data-day="5">Sat</button>
-              <button type="button" class="day-btn" data-day="6">Sun</button>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div class="form-heading">Bluetooth devices</div>
+            <div class="scan-row">
+              <span class="spinner" id="scan-spinner"></span>
+              <span class="scan-label" id="scan-label">Scanning…</span>
+              <button class="btn btn-ghost" id="btn-scan">Scan</button>
             </div>
           </div>
-          <div class="two-col">
-            <div class="field">
-              <label>Start</label>
-              <input type="time" id="cfg-work_start">
-            </div>
-            <div class="field">
-              <label>End</label>
-              <input type="time" id="cfg-work_end">
-            </div>
-          </div>
-          <div class="field-hint">Outside work hours/days, background tasks are paused. Leave both times empty to always run.</div>
+          <table class="device-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Address</th>
+                <th>RSSI</th>
+                <th>Signal</th>
+              </tr>
+            </thead>
+            <tbody id="devices-tbody">
+              <tr class="empty-row"><td colspan="4">No devices cached — run a scan.</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
-      <span class="config-note" id="config-note"></span>
     </section>
 
   </main>
@@ -1130,8 +1134,8 @@ document.querySelectorAll('.nav-item').forEach(item => {
     document.getElementById('section-' + item.dataset.target).classList.add('active');
 
     const t = item.dataset.target;
-    if (t === 'devices') loadDevices();
-    if (t === 'settings') { loadConfig(); loadRefreshStatus(); clearTimeout(_queuePollTimer); loadQueue(); }
+    if (t === 'config') { loadConfig(); loadRefreshStatus(); }
+    if (t === 'settings') { loadDevices(); loadConfig(); loadRefreshStatus(); clearTimeout(_queuePollTimer); loadQueue(); }
   });
 });
 
@@ -1868,6 +1872,7 @@ function esc(s) {
   await loadDeviceDropdown();
   refreshHealth();
   loadQueue();
+  loadDevices();
 })();
 </script>
 </body>
