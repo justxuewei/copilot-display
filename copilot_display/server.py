@@ -445,9 +445,13 @@ async def list_tasks():
 @app.delete("/api/tasks/done", status_code=204)
 async def delete_done_tasks():
     """Remove all finished (done/failed) tasks from the queue history."""
+    logger.info("delete_done_tasks: total tasks=%d, statuses=%s",
+                len(_tasks), {tid: info.get("status") for tid, info in _tasks.items()})
     stale = [tid for tid, info in _tasks.items() if info.get("status") in ("done", "failed")]
+    logger.info("delete_done_tasks: removing %d stale task(s): %s", len(stale), stale)
     for tid in stale:
         del _tasks[tid]
+    logger.info("delete_done_tasks: done, remaining tasks=%d", len(_tasks))
 
 
 @app.get("/api/tasks/{task_id}")
