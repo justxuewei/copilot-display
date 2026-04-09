@@ -134,6 +134,8 @@ def _fetch_one(sym: str) -> dict | None:
 
         overnight_scraped_pct: float | None = None
 
+        is_scraped = False
+
         if market_state == "PRE" and pre_price:
             price = pre_price
             price_label = "PRE"
@@ -147,6 +149,7 @@ def _fetch_one(sym: str) -> dict | None:
                 price = scraped_price
                 overnight_scraped_pct = scraped_pct
                 price_label = "O/N"
+                is_scraped = True
             elif post_price:
                 price = post_price
                 price_label = ""
@@ -156,6 +159,11 @@ def _fetch_one(sym: str) -> dict | None:
         else:
             price = regular_price
             price_label = ""
+
+        if is_scraped:
+            logger.info("Fetched data for %s directly from Yahoo Finance webpage (Overnight).", sym)
+        else:
+            logger.info("Fetched data for %s using yfinance API (market_state: %s).", sym, market_state)
 
         if price is None:
             price = regular_price
