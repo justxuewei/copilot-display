@@ -1,6 +1,9 @@
-from pathlib import Path as _Path
+from importlib.metadata import version as _version, PackageNotFoundError as _PackageNotFoundError
 
-__version__ = (_Path(__file__).resolve().parent.parent / "VERSION").read_text().strip()
+try:
+    __version__ = _version("copilot-display")
+except _PackageNotFoundError:
+    __version__ = "unknown"
 
 
 from copilot_display import templates  # noqa: E402, F401
