@@ -442,20 +442,20 @@ async def list_tasks():
     return [{"task_id": tid, **info} for tid, info in _tasks.items()]
 
 
-@app.get("/api/tasks/{task_id}")
-async def get_task(task_id: str):
-    task = _tasks.get(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return {"task_id": task_id, **task}
-
-
 @app.delete("/api/tasks/done", status_code=204)
 async def delete_done_tasks():
     """Remove all finished (done/failed) tasks from the queue history."""
     stale = [tid for tid, info in _tasks.items() if info.get("status") in ("done", "failed")]
     for tid in stale:
         del _tasks[tid]
+
+
+@app.get("/api/tasks/{task_id}")
+async def get_task(task_id: str):
+    task = _tasks.get(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"task_id": task_id, **task}
 
 
 def main():
