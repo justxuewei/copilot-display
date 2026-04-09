@@ -1465,24 +1465,33 @@ document.getElementById('btn-clear').addEventListener('click', async () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // Task polling
 // ═══════════════════════════════════════════════════════════════════════════
+function rearmPush() {
+  const isStock = document.getElementById('tmpl-select').value === 'stock';
+  if (isStock) {
+    if (!lastPreviewPayload || !lastPreviewPayload._stockPush)
+      lastPreviewPayload = { _stockPush: true, symbols: null };
+  }
+  document.getElementById('btn-push').disabled = !isStock && !lastPreviewPayload;
+}
+
 function pollTask(id, onDone) {
   clearTimeout(taskPollTimer);
   taskPollTimer = setTimeout(async () => {
     try {
       const res = await api('/api/tasks/' + id);
-      if (!res.ok) { setChip('failed', 'error'); return; }
+      if (!res.ok) { setChip('failed', 'error'); rearmPush(); return; }
       const task = await res.json();
       setChip(task.status, task.status.replace('_', ' '));
       updatePushProgress(task);
       if (task.status === 'queued' || task.status === 'in_progress') {
         pollTask(id, onDone);
       } else {
-        document.getElementById('btn-push').disabled = false;
+        rearmPush();
         if (task.status === 'done' && onDone) onDone();
       }
     } catch {
       setChip('failed', 'error');
-      document.getElementById('btn-push').disabled = false;
+      rearmPush();
     }
   }, 2000);
 }
