@@ -444,7 +444,28 @@ async def push_stocks(req: PushStocksRequest | None = None):
 
 @app.get("/api/tasks")
 async def list_tasks():
-    return [{"task_id": tid, **info} for tid, info in _tasks.items()]
+    # Recompute queue positions live: "queued" tasks get sequential positions
+    # in insertion order; "in_progress" is always 0; finished tasks get None.
+    queued_pos: dict[str, int] = {}
+    pos = 1
+    for tid, info in _tasks.items():
+        if info.get("status") == "queued":
+            queued_pos[tid] = pos
+            pos += 1
+
+    result = []
+    for tid, info in _tasks.items():
+        entry = {"task_id": tid, **info}
+        status = info.get("status")
+        if status == "queued":
+            entry["queue_position"] = queued_pos[tid]
+        elif status == "in_progress":
+            entry["queue_position"] = 0
+        else:
+            entry["queue_position"] = None
+        result.append(entry)
+    return result
+
 
 
 @app.delete("/api/tasks/done", status_code=204)
