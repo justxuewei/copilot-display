@@ -610,7 +610,7 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-width: 460px;
+  max-width: 680px;
 }
 
 .config-card {
