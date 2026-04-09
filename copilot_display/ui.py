@@ -1385,15 +1385,17 @@ document.getElementById('btn-preview').addEventListener('click', async () => {
 // ═══════════════════════════════════════════════════════════════════════════
 document.getElementById('btn-push').addEventListener('click', async () => {
   if (!lastPreviewPayload) return;
+  const isStock = lastPreviewPayload._stockPush;
   const device = document.getElementById('device-select').value || undefined;
   const btn = document.getElementById('btn-push');
-  btn.disabled = true;
+  // Stock: keep button enabled so queue can be stacked; non-stock: disable until done.
+  if (!isStock) btn.disabled = true;
   setChip('queued', 'queuing…');
   hideError();
 
   try {
     let res;
-    if (lastPreviewPayload._stockPush) {
+    if (isStock) {
       // Use the stocks push endpoint
       res = await api('/api/push/stocks', {
         method: 'POST',
@@ -1417,7 +1419,7 @@ document.getElementById('btn-push').addEventListener('click', async () => {
   } catch (e) {
     setChip('failed', 'push failed');
     showError(e.message);
-    btn.disabled = false;
+    rearmPush();
   }
 });
 
@@ -1468,10 +1470,13 @@ document.getElementById('btn-clear').addEventListener('click', async () => {
 function rearmPush() {
   const isStock = document.getElementById('tmpl-select').value === 'stock';
   if (isStock) {
+    // Stock push never needs a preview — always keep it armed.
     if (!lastPreviewPayload || !lastPreviewPayload._stockPush)
       lastPreviewPayload = { _stockPush: true, symbols: null };
+    document.getElementById('btn-push').disabled = false;
+  } else {
+    document.getElementById('btn-push').disabled = !lastPreviewPayload;
   }
-  document.getElementById('btn-push').disabled = !isStock && !lastPreviewPayload;
 }
 
 function pollTask(id, onDone) {
