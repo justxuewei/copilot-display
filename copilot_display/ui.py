@@ -1442,8 +1442,16 @@ document.getElementById('btn-clear').addEventListener('click', async () => {
       // Reset display frame
       document.getElementById('eink-screen').innerHTML =
         '<div class="eink-placeholder"><svg width="48" height="36" viewBox="0 0 48 36" fill="none"><rect x="1" y="1" width="46" height="34" rx="2" stroke="#aaa89a" stroke-width="1.5"/></svg><span>cleared</span></div>';
-      lastPreviewPayload = null;
-      document.getElementById('btn-push').disabled = true;
+      // Re-arm stock push (no preview needed); disable only for non-stock templates.
+      const isStock = document.getElementById('tmpl-select').value === 'stock';
+      if (isStock) {
+        lastPreviewPayload = { _stockPush: true, symbols: null };
+        document.getElementById('btn-push').disabled = false;
+        setChip('', 'ready to push');
+      } else {
+        lastPreviewPayload = null;
+        document.getElementById('btn-push').disabled = true;
+      }
     });
   } catch (e) {
     setChip('failed', 'failed');
@@ -1588,10 +1596,10 @@ function renderQueue(tasks) {
 
 document.getElementById('btn-queue-clear').addEventListener('click', async () => {
   try {
-    const res = await api('/api/tasks/done', { method: 'DELETE' });
-    if (!res.ok) return;
-    await loadQueue();
+    await api('/api/tasks/done', { method: 'DELETE' });
   } catch {}
+  // Always reload — 204 No Content is ok and has no body to parse
+  await loadQueue();
 });
 
 document.getElementById('btn-queue-refresh').addEventListener('click', loadQueue);
