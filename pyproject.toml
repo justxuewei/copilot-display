@@ -1,6 +1,6 @@
 [project]
 name = "copilot-display"
-version = "0.1.0"
+dynamic = ["version"]
 description = "FastAPI server to push text to BluTag 4.2-inch e-ink displays over BLE"
 requires-python = ">=3.12"
 dependencies = [
@@ -21,5 +21,9 @@ copilot-display = "copilot_display.server:main"
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
+
 [tool.setuptools.package-data]
 copilot_display = ["fonts/*.ttf"]
+

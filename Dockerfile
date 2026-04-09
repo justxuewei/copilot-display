@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # First copy the required files to install via pip
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md VERSION ./
 COPY copilot_display ./copilot_display
 
 # Install the application and its dependencies
