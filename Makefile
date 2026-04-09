@@ -31,7 +31,7 @@ tag:
 	$(if $(TAG),,$(error Usage: make tag <version>))
 	git tag $(TAG)
 	git push origin $(TAG)
-	$(MAKE) docker-push VERSION=$(TAG)
+	sudo $(MAKE) docker-push VERSION=$(TAG)
 
 %:
 	@:
