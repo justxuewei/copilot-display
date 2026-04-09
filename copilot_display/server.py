@@ -89,6 +89,7 @@ async def _queue_worker() -> None:
         task_id, img, device = await _queue.get()
         _tasks[task_id].update({
             "status": "in_progress",
+            "queue_position": 0,
             "black_sent": 0, "black_total": 0,
             "red_sent":   0, "red_total":   0,
         })
