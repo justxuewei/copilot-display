@@ -664,6 +664,92 @@ html, body {
 .config-note.ok  { color: var(--green-hi); }
 .config-note.err { color: var(--accent-hi); }
 
+/* ── Queue section ───────────────────────────────────────────────────────── */
+#section-queue {
+  flex-direction: column;
+  padding: 20px 24px;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.queue-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.queue-table th {
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+.queue-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.queue-table tr:last-child td { border-bottom: none; }
+.queue-table tbody tr:hover td { background: var(--surface2); }
+.queue-table .task-id-cell {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+}
+.queue-table .pos-cell {
+  color: var(--text-faint);
+  font-size: 11px;
+  text-align: center;
+}
+
+.channel-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+}
+.ch-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ch-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  width: 32px;
+  flex-shrink: 0;
+}
+.ch-label.black { color: var(--text-dim); }
+.ch-label.red   { color: var(--accent-hi); }
+.ch-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: var(--surface3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ch-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  min-width: 2px;
+}
+.ch-bar.black { background: var(--text); }
+.ch-bar.red   { background: var(--accent-hi); }
+.ch-pct {
+  font-size: 10px;
+  color: var(--text-faint);
+  width: 30px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
 /* ── Auth overlay ────────────────────────────────────────────────────────── */
 .auth-overlay {
   position: fixed; inset: 0;
@@ -739,6 +825,9 @@ html, body {
     </div>
     <div class="nav-item" data-target="devices">
       <span class="nav-icon">◈</span>Devices
+    </div>
+    <div class="nav-item" data-target="queue">
+      <span class="nav-icon">▣</span>Queue
     </div>
     <div class="nav-item" data-target="health">
       <span class="nav-icon">◎</span>Health
@@ -822,6 +911,8 @@ html, body {
           <span class="task-id-label" id="task-id-label"></span>
         </div>
 
+        <div class="channel-progress" id="push-channel-progress" style="display:none"></div>
+
         <div class="error-banner" id="preview-error" style="display:none"></div>
       </div>
     </section>
@@ -847,6 +938,31 @@ html, body {
         </thead>
         <tbody id="devices-tbody">
           <tr class="empty-row"><td colspan="4">No devices cached — run a scan.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ╔══ Queue ══╗ -->
+    <section class="section" id="section-queue">
+      <div class="section-hdr">
+        <span class="section-hdr-title">Task queue</span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="refresh-note" id="queue-refresh-note"></span>
+          <button class="btn btn-ghost" id="btn-queue-clear">Clear done</button>
+          <button class="btn btn-ghost" id="btn-queue-refresh">Refresh</button>
+        </div>
+      </div>
+      <table class="queue-table">
+        <thead>
+          <tr>
+            <th>Task ID</th>
+            <th>Status</th>
+            <th style="text-align:center">Queue pos</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody id="queue-tbody">
+          <tr class="empty-row"><td colspan="4">No tasks yet.</td></tr>
         </tbody>
       </table>
     </section>
@@ -1028,6 +1144,7 @@ document.querySelectorAll('.nav-item').forEach(item => {
 
     const t = item.dataset.target;
     if (t === 'devices') loadDevices();
+    if (t === 'queue') { clearTimeout(_queuePollTimer); loadQueue(); }
     if (t === 'health') { clearTimeout(healthTimer); refreshHealth(); }
     if (t === 'settings') { loadConfig(); loadRefreshStatus(); }
   });
@@ -1349,6 +1466,7 @@ function pollTask(id, onDone) {
       if (!res.ok) { setChip('failed', 'error'); return; }
       const task = await res.json();
       setChip(task.status, task.status.replace('_', ' '));
+      updatePushProgress(task);
       if (task.status === 'queued' || task.status === 'in_progress') {
         pollTask(id, onDone);
       } else {
@@ -1362,6 +1480,18 @@ function pollTask(id, onDone) {
   }, 2000);
 }
 
+function updatePushProgress(task) {
+  const el = document.getElementById('push-channel-progress');
+  const html = channelProgressHTML(task);
+  if (html) {
+    el.innerHTML = html;
+    el.style.display = 'flex';
+  } else if (task.status !== 'in_progress') {
+    el.style.display = 'none';
+    el.innerHTML = '';
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Status chip helpers
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1369,7 +1499,12 @@ function setChip(cls, text) {
   const chip = document.getElementById('task-chip');
   chip.className = 'status-chip' + (cls ? ' ' + cls : '');
   document.getElementById('task-chip-text').textContent = text;
-  if (!cls) document.getElementById('task-id-label').textContent = '';
+  if (!cls) {
+    document.getElementById('task-id-label').textContent = '';
+    const prog = document.getElementById('push-channel-progress');
+    prog.style.display = 'none';
+    prog.innerHTML = '';
+  }
 }
 
 function showError(msg) {
@@ -1380,6 +1515,94 @@ function showError(msg) {
 function hideError() {
   document.getElementById('preview-error').style.display = 'none';
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Queue section
+// ═══════════════════════════════════════════════════════════════════════════
+let _queuePollTimer = null;
+
+async function loadQueue() {
+  try {
+    const res = await api('/api/tasks');
+    if (!res.ok) return;
+    const tasks = await res.json();
+    renderQueue(tasks);
+    document.getElementById('queue-refresh-note').textContent =
+      'updated ' + new Date().toLocaleTimeString();
+    // Keep polling while any task is active
+    const active = tasks.some(t => t.status === 'queued' || t.status === 'in_progress');
+    clearTimeout(_queuePollTimer);
+    if (active) _queuePollTimer = setTimeout(loadQueue, 2000);
+  } catch {}
+}
+
+function channelProgressHTML(t) {
+  const bSent  = t.black_sent  ?? 0;
+  const bTotal = t.black_total ?? 0;
+  const rSent  = t.red_sent    ?? 0;
+  const rTotal = t.red_total   ?? 0;
+  if (!bTotal && !rTotal) return '';
+  function bar(cls, sent, total) {
+    const pct = total > 0 ? Math.round(sent / total * 100) : 0;
+    return `<div class="ch-row">
+      <span class="ch-label ${cls}">${cls}</span>
+      <div class="ch-bar-wrap"><div class="ch-bar ${cls}" style="width:${pct}%"></div></div>
+      <span class="ch-pct">${pct}%</span>
+    </div>`;
+  }
+  return `<div class="channel-progress">
+    ${bTotal ? bar('black', bSent, bTotal) : ''}
+    ${rTotal ? bar('red',   rSent, rTotal) : ''}
+  </div>`;
+}
+
+function renderQueue(tasks) {
+  const tbody = document.getElementById('queue-tbody');
+  if (!tasks.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No tasks yet.</td></tr>';
+    return;
+  }
+  // Show newest first
+  const sorted = [...tasks].reverse();
+  tbody.innerHTML = sorted.map(t => {
+    const shortId = t.task_id ? t.task_id.slice(0, 8) + '…' : '—';
+    const statusCls = t.status === 'in_progress' ? 'in_progress' : (t.status || '');
+    const statusLabel = (t.status || '—').replace('_', ' ');
+    const pos = t.queue_position != null ? t.queue_position : '—';
+    let detail = '';
+    if (t.error) {
+      detail = `<span style="color:var(--accent-hi)">${esc(t.error)}</span>`;
+    } else if (t.status === 'in_progress') {
+      detail = channelProgressHTML(t);
+    } else if (t.status === 'done') {
+      detail = channelProgressHTML(t) ||
+        '<span style="color:var(--green-hi)">sent to device</span>';
+    }
+    return `<tr>
+      <td class="task-id-cell">${esc(shortId)}</td>
+      <td><span class="status-chip ${esc(statusCls)}"><span class="dot"></span>${esc(statusLabel)}</span></td>
+      <td class="pos-cell">${t.status === 'queued' ? esc(String(pos)) : '—'}</td>
+      <td>${detail}</td>
+    </tr>`;
+  }).join('');
+}
+
+// Clear done/failed tasks from local view (server keeps them; we just hide them client-side)
+let _hiddenTaskIds = new Set();
+
+document.getElementById('btn-queue-clear').addEventListener('click', async () => {
+  try {
+    const res = await api('/api/tasks');
+    if (!res.ok) return;
+    const tasks = await res.json();
+    tasks.filter(t => t.status === 'done' || t.status === 'failed')
+         .forEach(t => _hiddenTaskIds.add(t.task_id));
+    const visible = tasks.filter(t => !_hiddenTaskIds.has(t.task_id));
+    renderQueue(visible);
+  } catch {}
+});
+
+document.getElementById('btn-queue-refresh').addEventListener('click', loadQueue);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Devices section

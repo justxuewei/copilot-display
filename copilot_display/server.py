@@ -87,10 +87,21 @@ async def _background_scan(interval: int) -> None:
 async def _queue_worker() -> None:
     while True:
         task_id, img, device = await _queue.get()
-        _tasks[task_id]["status"] = "in_progress"
+        _tasks[task_id].update({
+            "status": "in_progress",
+            "black_sent": 0, "black_total": 0,
+            "red_sent":   0, "red_total":   0,
+        })
         logger.info("Processing task %s", task_id)
+
+        def on_progress(channel: str, sent: int, total: int) -> None:
+            if channel == "black":
+                _tasks[task_id].update({"black_sent": sent, "black_total": total})
+            else:
+                _tasks[task_id].update({"red_sent": sent, "red_total": total})
+
         try:
-            result = await push_image(img, device_address=device)
+            result = await push_image(img, device_address=device, on_progress=on_progress)
             _tasks[task_id].update({"status": "done", **result})
         except Exception as e:
             logger.exception("Task %s failed", task_id)
@@ -404,6 +415,11 @@ async def push_stocks(req: PushStocksRequest | None = None):
         _queue.qsize(),
     )
     return {"task_id": task_id, "status": "queued", "symbols": symbols, "data": data}
+
+
+@app.get("/api/tasks")
+async def list_tasks():
+    return [{"task_id": tid, **info} for tid, info in _tasks.items()]
 
 
 @app.get("/api/tasks/{task_id}")
