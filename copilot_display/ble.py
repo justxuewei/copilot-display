@@ -332,7 +332,7 @@ async def push_image(
         elapsed = time.monotonic() - start_time
         logger.info("Push complete in %.1fs", elapsed)
         return {
-            "status": "ok",
+            "ble_status": "ok",
             "device": device_address,
             "duration_seconds": round(elapsed, 1),
         }
