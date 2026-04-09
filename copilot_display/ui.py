@@ -555,13 +555,6 @@ html, body {
 .sig-bars span.on.med { background: var(--yellow); }
 .sig-bars span.on.low { background: var(--accent); }
 
-/* ── Health section ──────────────────────────────────────────────────────── */
-#section-health {
-  flex-direction: column;
-  padding: 20px 24px;
-  gap: 14px;
-  overflow-y: auto;
-}
 
 .stat-grid {
   display: grid;
@@ -664,14 +657,7 @@ html, body {
 .config-note.ok  { color: var(--green-hi); }
 .config-note.err { color: var(--accent-hi); }
 
-/* ── Queue section ───────────────────────────────────────────────────────── */
-#section-queue {
-  flex-direction: column;
-  padding: 20px 24px;
-  gap: 14px;
-  overflow-y: auto;
-}
-
+/* ── Queue / Health (embedded in Home) ───────────────────────────────────── */
 .queue-table {
   width: 100%;
   border-collapse: collapse;
@@ -700,6 +686,7 @@ html, body {
   color: var(--text-dim);
   font-family: var(--mono);
 }
+
 .queue-table .pos-cell {
   color: var(--text-faint);
   font-size: 11px;
@@ -826,12 +813,6 @@ html, body {
     <div class="nav-item" data-target="devices">
       <span class="nav-icon">◈</span>Devices
     </div>
-    <div class="nav-item" data-target="queue">
-      <span class="nav-icon">▣</span>Queue
-    </div>
-    <div class="nav-item" data-target="health">
-      <span class="nav-icon">◎</span>Health
-    </div>
     <div class="sidebar-footer">BluTag 4.2″ · BLK/WHT/RED</div>
   </nav>
 
@@ -942,37 +923,14 @@ html, body {
       </table>
     </section>
 
-    <!-- ╔══ Queue ══╗ -->
-    <section class="section" id="section-queue">
+    <!-- ╔══ Settings / Home ══╗ -->
+    <section class="section active" id="section-settings">
       <div class="section-hdr">
-        <span class="section-hdr-title">Task queue</span>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span class="refresh-note" id="queue-refresh-note"></span>
-          <button class="btn btn-ghost" id="btn-queue-clear">Clear done</button>
-          <button class="btn btn-ghost" id="btn-queue-refresh">Refresh</button>
-        </div>
-      </div>
-      <table class="queue-table">
-        <thead>
-          <tr>
-            <th>Task ID</th>
-            <th>Status</th>
-            <th style="text-align:center">Queue pos</th>
-            <th>Detail</th>
-          </tr>
-        </thead>
-        <tbody id="queue-tbody">
-          <tr class="empty-row"><td colspan="4">No tasks yet.</td></tr>
-        </tbody>
-      </table>
-    </section>
-
-    <!-- ╔══ Health ══╗ -->
-    <section class="section" id="section-health">
-      <div class="section-hdr">
-        <span class="section-hdr-title">System health</span>
+        <span class="section-hdr-title">Home</span>
         <span class="refresh-note" id="refresh-note">auto-refresh every 5 s</span>
       </div>
+
+      <!-- Health stats -->
       <div class="stat-grid">
         <div class="stat-card">
           <span class="stat-label">Status</span>
@@ -991,14 +949,8 @@ html, body {
           <span class="stat-value" id="stat-queue">—</span>
         </div>
       </div>
-    </section>
 
-    <!-- ╔══ Settings ══╗ -->
-    <section class="section active" id="section-settings">
-      <div class="section-hdr">
-        <span class="section-hdr-title">Home</span>
-        <button class="btn btn-primary" id="btn-save-config">Save</button>
-      </div>
+      <!-- Refresh status -->
       <div class="config-grid">
         <div class="config-card">
           <div class="form-heading">Refresh status</div>
@@ -1021,6 +973,37 @@ html, body {
           </div>
           <div class="field-hint">Set via the Template section. This template and its data will be used for background refresh.</div>
         </div>
+      </div>
+
+      <!-- Task queue -->
+      <div class="section-hdr" style="margin-top:8px">
+        <span class="section-hdr-title">Task queue</span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="refresh-note" id="queue-refresh-note"></span>
+          <button class="btn btn-ghost" id="btn-queue-clear">Clear done</button>
+          <button class="btn btn-ghost" id="btn-queue-refresh">Refresh</button>
+        </div>
+      </div>
+      <table class="queue-table">
+        <thead>
+          <tr>
+            <th>Task ID</th>
+            <th>Status</th>
+            <th style="text-align:center">Queue pos</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody id="queue-tbody">
+          <tr class="empty-row"><td colspan="4">No tasks yet.</td></tr>
+        </tbody>
+      </table>
+
+      <!-- Scheduling & work hours -->
+      <div class="section-hdr" style="margin-top:8px">
+        <span class="section-hdr-title">Configuration</span>
+        <button class="btn btn-primary" id="btn-save-config">Save</button>
+      </div>
+      <div class="config-grid">
         <div class="config-card">
           <div class="form-heading">Scheduling</div>
           <div class="field">
@@ -1144,9 +1127,7 @@ document.querySelectorAll('.nav-item').forEach(item => {
 
     const t = item.dataset.target;
     if (t === 'devices') loadDevices();
-    if (t === 'queue') { clearTimeout(_queuePollTimer); loadQueue(); }
-    if (t === 'health') { clearTimeout(healthTimer); refreshHealth(); }
-    if (t === 'settings') { loadConfig(); loadRefreshStatus(); }
+    if (t === 'settings') { loadConfig(); loadRefreshStatus(); clearTimeout(_queuePollTimer); loadQueue(); }
   });
 });
 
@@ -1568,7 +1549,6 @@ function renderQueue(tasks) {
     const shortId = t.task_id ? t.task_id.slice(0, 8) + '…' : '—';
     const statusCls = t.status === 'in_progress' ? 'in_progress' : (t.status || '');
     const statusLabel = (t.status || '—').replace('_', ' ');
-    const pos = t.queue_position != null ? t.queue_position : '—';
     let detail = '';
     if (t.error) {
       detail = `<span style="color:var(--accent-hi)">${esc(t.error)}</span>`;
@@ -1578,10 +1558,11 @@ function renderQueue(tasks) {
       detail = channelProgressHTML(t) ||
         '<span style="color:var(--green-hi)">sent to device</span>';
     }
+    const pos = t.queue_position != null ? t.queue_position : 0;
     return `<tr>
       <td class="task-id-cell">${esc(shortId)}</td>
       <td><span class="status-chip ${esc(statusCls)}"><span class="dot"></span>${esc(statusLabel)}</span></td>
-      <td class="pos-cell">${t.status === 'queued' ? esc(String(pos)) : '—'}</td>
+      <td class="pos-cell">${esc(String(pos))}</td>
       <td>${detail}</td>
     </tr>`;
   }).join('');
@@ -1882,6 +1863,7 @@ function esc(s) {
   await loadTemplates();
   await loadDeviceDropdown();
   refreshHealth();
+  loadQueue();
 })();
 </script>
 </body>
