@@ -50,11 +50,29 @@ _last_refresh:    datetime | None = None
 _last_scan:       datetime | None = None
 _next_refresh_at: datetime | None = None
 _refresh_task:    asyncio.Task | None = None
+_cleanup_task:    asyncio.Task | None = None
+_next_task_cleanup_at: datetime | None = None
 
 # Statuses that indicate a task has reached a terminal state.
 # Includes "ok" (legacy: was returned by push_image before the ble_status rename)
 # and "error" as defensive catches for any unexpected values.
 _TERMINAL_STATUSES = {"done", "failed", "ok", "error"}
+
+
+def _parse_hhmm(value: str, default: dt_time = dt_time(0, 0)) -> dt_time:
+    try:
+        hour, minute = value.split(":", 1)
+        return dt_time(int(hour), int(minute))
+    except (AttributeError, TypeError, ValueError):
+        return default
+
+
+def _next_daily_time(clear_time: dt_time, now: datetime | None = None) -> datetime:
+    now = now or datetime.now()
+    next_at = datetime.combine(now.date(), clear_time)
+    if next_at <= now:
+        next_at += timedelta(days=1)
+    return next_at
 
 
 def _load_timestamps() -> None:
@@ -116,21 +134,47 @@ async def _queue_worker() -> None:
             _queue.task_done()
 
 
+def _delete_finished_tasks() -> int:
+    stale = [tid for tid, info in _tasks.items() if info.get("status") in _TERMINAL_STATUSES]
+    for tid in stale:
+        del _tasks[tid]
+    return len(stale)
+
+
 async def _task_cleanup_worker() -> None:
-    """Remove done/failed tasks older than 24 hours once per day."""
+    """Remove finished tasks once per day at the configured local time."""
+    global _next_task_cleanup_at
     while True:
-        await asyncio.sleep(86_400)  # 24 h
-        cutoff = datetime.now() - timedelta(hours=24)
-        stale = [
-            tid for tid, info in _tasks.items()
-            if info.get("status") in _TERMINAL_STATUSES
-            and info.get("completed_at")
-            and datetime.fromisoformat(info["completed_at"]) < cutoff
-        ]
-        for tid in stale:
-            del _tasks[tid]
-        if stale:
-            logger.info("Pruned %d stale task(s) from queue history", len(stale))
+        config = store.load_config()
+        clear_time = _parse_hhmm(config.get("task_clear_time", "00:00"))
+        _next_task_cleanup_at = _next_daily_time(clear_time)
+        logger.info("Next finished-task cleanup scheduled at %s", _next_task_cleanup_at.isoformat())
+        await asyncio.sleep(max(0, (_next_task_cleanup_at - datetime.now()).total_seconds()))
+        if not store.load_config().get("auto_clear_finished_tasks", False):
+            logger.info("Finished-task cleanup skipped: disabled")
+            continue
+        deleted = _delete_finished_tasks()
+        if deleted:
+            logger.info("Pruned %d finished task(s) from queue history", deleted)
+
+
+async def _restart_task_cleanup(config: dict | None = None) -> None:
+    global _cleanup_task, _next_task_cleanup_at
+    if _cleanup_task is not None:
+        _cleanup_task.cancel()
+        try:
+            await _cleanup_task
+        except asyncio.CancelledError:
+            pass
+        _cleanup_task = None
+
+    config = config or store.load_config()
+    if config.get("auto_clear_finished_tasks", False):
+        _cleanup_task = asyncio.create_task(_task_cleanup_worker())
+        logger.info("Finished-task cleanup enabled (time=%s)", config.get("task_clear_time", "00:00"))
+    else:
+        _next_task_cleanup_at = None
+        logger.info("Finished-task cleanup disabled")
 
 
 def _is_work_time(config: dict) -> bool:
@@ -198,9 +242,9 @@ async def lifespan(app: FastAPI):
     _load_timestamps()
     config = store.load_config()
     logger.info("Config: %s", config)
-    scan_interval = config.get("scan_interval", settings.scan_interval)
     worker_task = asyncio.create_task(_queue_worker())
-    cleanup_task = asyncio.create_task(_task_cleanup_worker())
+    await _restart_task_cleanup(config)
+    scan_interval = config.get("scan_interval", settings.scan_interval)
     scan_task = None
     if scan_interval > 0:
         scan_task = asyncio.create_task(_background_scan(scan_interval))
@@ -214,11 +258,10 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Background refresh disabled (refresh_interval=0)")
     yield
-    for t in filter(None, (scan_task, _refresh_task)):
+    for t in filter(None, (scan_task, _refresh_task, _cleanup_task)):
         t.cancel()
     worker_task.cancel()
-    cleanup_task.cancel()
-    for t in filter(None, (scan_task, _refresh_task, worker_task, cleanup_task)):
+    for t in filter(None, (scan_task, _refresh_task, _cleanup_task, worker_task)):
         try:
             await t
         except asyncio.CancelledError:
@@ -243,6 +286,9 @@ async def health():
     next_refresh_in: int | None = None
     if _next_refresh_at is not None:
         next_refresh_in = max(0, int((_next_refresh_at - datetime.now()).total_seconds()))
+    next_task_cleanup_in: int | None = None
+    if _next_task_cleanup_at is not None:
+        next_task_cleanup_in = max(0, int((_next_task_cleanup_at - datetime.now()).total_seconds()))
     config = store.load_config()
     return {
         "status": "ok",
@@ -251,6 +297,7 @@ async def health():
         "queue_depth": _queue.qsize(),
         "last_refresh": _last_refresh.isoformat() if _last_refresh else None,
         "next_refresh_in": next_refresh_in,
+        "next_task_cleanup_in": next_task_cleanup_in,
         "is_work_time": _is_work_time(config),
     }
 
@@ -381,6 +428,8 @@ async def patch_config(updates: dict[str, Any]):
             _next_refresh_at = None
             _refresh_task = None
             logger.info("Background refresh disabled")
+    if "auto_clear_finished_tasks" in updates or "task_clear_time" in updates:
+        await _restart_task_cleanup(config)
     return config
 
 
@@ -480,10 +529,8 @@ async def delete_done_tasks():
     """Remove all finished (done/failed) tasks from the queue history."""
     logger.info("delete_done_tasks: total tasks=%d, statuses=%s",
                 len(_tasks), {tid: info.get("status") for tid, info in _tasks.items()})
-    stale = [tid for tid, info in _tasks.items() if info.get("status") in _TERMINAL_STATUSES]
-    logger.info("delete_done_tasks: removing %d stale task(s): %s", len(stale), stale)
-    for tid in stale:
-        del _tasks[tid]
+    deleted = _delete_finished_tasks()
+    logger.info("delete_done_tasks: removed %d finished task(s)", deleted)
     logger.info("delete_done_tasks: done, remaining tasks=%d", len(_tasks))
 
 

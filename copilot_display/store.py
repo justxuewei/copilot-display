@@ -18,6 +18,8 @@ _DEFAULT_CONFIG: dict = {
     "work_days": [0, 1, 2, 3, 4],  # 0=Mon … 6=Sun; empty list = every day
     "work_start": "10:00",         # HH:MM — start of active window (empty = always active)
     "work_end": "20:00",           # HH:MM — end of active window (empty = always active)
+    "auto_clear_finished_tasks": False,
+    "task_clear_time": "00:00",     # HH:MM local time
 }
 
 

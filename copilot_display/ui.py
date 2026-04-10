@@ -918,6 +918,23 @@ html, body {
           </div>
         </div>
         <div class="config-card">
+          <div class="form-heading">Queue cleanup</div>
+          <div class="two-col">
+            <div class="field">
+              <label>Auto clear finished tasks</label>
+              <select id="cfg-auto_clear_finished_tasks">
+                <option value="false">Disabled</option>
+                <option value="true">Enabled</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Clear time</label>
+              <input type="time" id="cfg-task_clear_time">
+            </div>
+          </div>
+          <div class="field-hint">When enabled, finished queue entries are cleared once a day at the selected local time.</div>
+        </div>
+        <div class="config-card">
           <div class="form-heading">Work hours</div>
           <div class="field">
             <label>Days</label>
@@ -1849,6 +1866,8 @@ async function loadConfig() {
     _savedConfig = await res.json();
     document.getElementById('cfg-scan_interval').value    = _savedConfig.scan_interval    ?? 60;
     document.getElementById('cfg-refresh_interval').value = _savedConfig.refresh_interval ?? 300;
+    document.getElementById('cfg-auto_clear_finished_tasks').value = _savedConfig.auto_clear_finished_tasks ? 'true' : 'false';
+    document.getElementById('cfg-task_clear_time').value = _savedConfig.task_clear_time ?? '00:00';
     document.getElementById('cfg-work_start').value       = _savedConfig.work_start       ?? '';
     document.getElementById('cfg-work_end').value         = _savedConfig.work_end         ?? '';
     const days = _savedConfig.work_days ?? [0,1,2,3,4];
@@ -1876,6 +1895,8 @@ document.getElementById('btn-save-config').addEventListener('click', async () =>
     const updates = {
       scan_interval:    parseInt(document.getElementById('cfg-scan_interval').value,    10) || 0,
       refresh_interval: parseInt(document.getElementById('cfg-refresh_interval').value, 10) || 0,
+      auto_clear_finished_tasks: document.getElementById('cfg-auto_clear_finished_tasks').value === 'true',
+      task_clear_time: document.getElementById('cfg-task_clear_time').value || '00:00',
       work_days: [...document.querySelectorAll('#cfg-work_days .day-btn.on')].map(b => parseInt(b.dataset.day)),
       work_start: document.getElementById('cfg-work_start').value.trim(),
       work_end:   document.getElementById('cfg-work_end').value.trim(),
