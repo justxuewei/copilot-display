@@ -59,6 +59,59 @@ _next_task_cleanup_at: datetime | None = None
 _TERMINAL_STATUSES = {"done", "failed", "ok", "error"}
 
 
+def _now_iso() -> str:
+    return datetime.now().isoformat()
+
+
+def _new_task(status: str = "queued", *, queue_position: int | None = None, **extra: Any) -> dict[str, Any]:
+    now = _now_iso()
+    return {
+        "status": status,
+        "queue_position": queue_position,
+        "created_at": now,
+        "updated_at": now,
+        **extra,
+    }
+
+
+def _update_task(task_id: str, *, timestamp: str | None = None, **updates: Any) -> dict[str, Any]:
+    task = _tasks[task_id]
+    stamp = timestamp or _now_iso()
+    task.update(updates)
+    task["updated_at"] = stamp
+    return task
+
+
+async def _enqueue_task(img: Any, device: str | None) -> str:
+    task_id = str(uuid.uuid4())
+    _tasks[task_id] = _new_task(queue_position=_queue.qsize() + 1)
+    await _queue.put((task_id, img, device))
+    return task_id
+
+
+def _queued_positions() -> dict[str, int]:
+    queued_pos: dict[str, int] = {}
+    pos = 1
+    for tid, info in _tasks.items():
+        if info.get("status") == "queued":
+            queued_pos[tid] = pos
+            pos += 1
+    return queued_pos
+
+
+def _serialize_task(task_id: str, info: dict[str, Any], queued_pos: dict[str, int] | None = None) -> dict[str, Any]:
+    queued_pos = queued_pos or {}
+    entry = {"task_id": task_id, **info}
+    status = info.get("status")
+    if status == "queued":
+        entry["queue_position"] = queued_pos.get(task_id, info.get("queue_position"))
+    elif status == "in_progress":
+        entry["queue_position"] = 0
+    else:
+        entry["queue_position"] = None
+    return entry
+
+
 def _parse_hhmm(value: str, default: dt_time = dt_time(0, 0)) -> dt_time:
     try:
         hour, minute = value.split(":", 1)
@@ -110,7 +163,7 @@ async def _background_scan(interval: int) -> None:
 async def _queue_worker() -> None:
     while True:
         task_id, img, device = await _queue.get()
-        _tasks[task_id].update({
+        _update_task(task_id, **{
             "status": "in_progress",
             "queue_position": 0,
             "black_sent": 0, "black_total": 0,
@@ -120,16 +173,18 @@ async def _queue_worker() -> None:
 
         def on_progress(channel: str, sent: int, total: int) -> None:
             if channel == "black":
-                _tasks[task_id].update({"black_sent": sent, "black_total": total})
+                _update_task(task_id, black_sent=sent, black_total=total)
             else:
-                _tasks[task_id].update({"red_sent": sent, "red_total": total})
+                _update_task(task_id, red_sent=sent, red_total=total)
 
         try:
             result = await push_image(img, device_address=device, on_progress=on_progress)
-            _tasks[task_id].update({"status": "done", "completed_at": datetime.now().isoformat(), **result})
+            completed_at = _now_iso()
+            _update_task(task_id, timestamp=completed_at, status="done", completed_at=completed_at, **result)
         except Exception as e:
             logger.exception("Task %s failed", task_id)
-            _tasks[task_id].update({"status": "failed", "completed_at": datetime.now().isoformat(), "error": str(e)})
+            completed_at = _now_iso()
+            _update_task(task_id, timestamp=completed_at, status="failed", completed_at=completed_at, error=str(e))
         finally:
             _queue.task_done()
 
@@ -214,9 +269,7 @@ async def _do_refresh() -> None:
     img = tmpl.render(data)
 
     device = settings.device_address or None
-    task_id = str(uuid.uuid4())
-    _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
-    await _queue.put((task_id, img, device))
+    task_id = await _enqueue_task(img, device)
     _last_refresh = datetime.now()
     _save_timestamps()
     logger.info("Enqueued refresh task %s (template=%s)", task_id, template_name)
@@ -320,9 +373,7 @@ async def clear_endpoint(device: str | None = None):
     from PIL import Image as PILImage
     from copilot_display.ble import SCREEN_H, SCREEN_W
     white = PILImage.new("RGB", (SCREEN_W, SCREEN_H), (255, 255, 255))
-    task_id = str(uuid.uuid4())
-    _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
-    await _queue.put((task_id, white, device or settings.device_address or None))
+    task_id = await _enqueue_task(white, device or settings.device_address or None)
     return {"task_id": task_id, "status": "queued"}
 
 
@@ -338,9 +389,7 @@ async def push_text(req: PushTextRequest):
         body_color=req.body_color,
     )
 
-    task_id = str(uuid.uuid4())
-    _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
-    await _queue.put((task_id, img, req.device or settings.device_address or None))
+    task_id = await _enqueue_task(img, req.device or settings.device_address or None)
     logger.info("Enqueued task %s (queue depth: %d)", task_id, _queue.qsize())
 
     return {"task_id": task_id, "status": "queued"}
@@ -456,9 +505,7 @@ async def push_template(req: PushTemplateRequest):
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=f"Template data error: {exc}") from exc
 
-    task_id = str(uuid.uuid4())
-    _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
-    await _queue.put((task_id, img, req.device or settings.device_address or None))
+    task_id = await _enqueue_task(img, req.device or settings.device_address or None)
     logger.info(
         "Enqueued template task %s (template=%s, queue depth: %d)",
         task_id,
@@ -486,9 +533,7 @@ async def push_stocks(req: PushStocksRequest | None = None):
     tmpl = templates.get("stock")
     img = tmpl.render(data)
 
-    task_id = str(uuid.uuid4())
-    _tasks[task_id] = {"status": "queued", "queue_position": _queue.qsize() + 1}
-    await _queue.put((task_id, img, device))
+    task_id = await _enqueue_task(img, device)
     logger.info(
         "Enqueued stocks task %s (symbols=%s, queue depth: %d)",
         task_id,
@@ -502,24 +547,11 @@ async def push_stocks(req: PushStocksRequest | None = None):
 async def list_tasks():
     # Recompute queue positions live: "queued" tasks get sequential positions
     # in insertion order; "in_progress" is always 0; finished tasks get None.
-    queued_pos: dict[str, int] = {}
-    pos = 1
-    for tid, info in _tasks.items():
-        if info.get("status") == "queued":
-            queued_pos[tid] = pos
-            pos += 1
+    queued_pos = _queued_positions()
 
     result = []
     for tid, info in _tasks.items():
-        entry = {"task_id": tid, **info}
-        status = info.get("status")
-        if status == "queued":
-            entry["queue_position"] = queued_pos[tid]
-        elif status == "in_progress":
-            entry["queue_position"] = 0
-        else:
-            entry["queue_position"] = None
-        result.append(entry)
+        result.append(_serialize_task(tid, info, queued_pos))
     return result
 
 
@@ -539,7 +571,7 @@ async def get_task(task_id: str):
     task = _tasks.get(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    return {"task_id": task_id, **task}
+    return _serialize_task(task_id, task, _queued_positions())
 
 
 def main():

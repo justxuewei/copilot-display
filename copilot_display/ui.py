@@ -694,6 +694,30 @@ html, body {
   text-align: center;
 }
 
+.queue-table .time-cell {
+  white-space: nowrap;
+  width: 1%;
+}
+
+.task-time {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.2;
+}
+
+.task-time-main {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-family: var(--mono);
+}
+
+.task-time-sub {
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
 .channel-progress {
   display: flex;
   flex-direction: column;
@@ -1033,11 +1057,13 @@ html, body {
                 <th>Task ID</th>
                 <th>Status</th>
                 <th style="text-align:center">Queue pos</th>
+                <th>Created</th>
+                <th>Updated</th>
                 <th>Detail</th>
               </tr>
             </thead>
             <tbody id="queue-tbody">
-              <tr class="empty-row"><td colspan="4">No tasks yet.</td></tr>
+              <tr class="empty-row"><td colspan="6">No tasks yet.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1599,7 +1625,7 @@ function channelProgressHTML(t) {
 function renderQueue(tasks) {
   const tbody = document.getElementById('queue-tbody');
   if (!tasks.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No tasks yet.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No tasks yet.</td></tr>';
     return;
   }
   // Show newest first
@@ -1622,6 +1648,8 @@ function renderQueue(tasks) {
       <td class="task-id-cell">${esc(shortId)}</td>
       <td><span class="status-chip ${esc(statusCls)}"><span class="dot"></span>${esc(statusLabel)}</span></td>
       <td class="pos-cell">${esc(String(pos))}</td>
+      <td class="time-cell">${formatTaskTimeCell(t.created_at)}</td>
+      <td class="time-cell">${formatTaskTimeCell(t.updated_at)}</td>
       <td>${detail}</td>
     </tr>`;
   }).join('');
@@ -1920,6 +1948,17 @@ document.getElementById('btn-save-config').addEventListener('click', async () =>
 // ═══════════════════════════════════════════════════════════════════════════
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function formatTaskTimeCell(value) {
+  if (!value) return '<span class="task-time-sub">—</span>';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return `<span class="task-time-main">${esc(value)}</span>`;
+  }
+  const dateText = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const timeText = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return `<div class="task-time"><span class="task-time-main">${esc(dateText)}</span><span class="task-time-sub">${esc(timeText)}</span></div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
