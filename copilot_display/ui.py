@@ -614,6 +614,10 @@ html, body {
   max-width: 680px;
 }
 
+.config-grid.full-width {
+  max-width: none;
+}
+
 .config-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -664,6 +668,15 @@ html, body {
   border-collapse: collapse;
   font-size: 12px;
 }
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.table-scroll .queue-table {
+  min-width: 860px;
+}
+
 .queue-table th {
   padding: 7px 10px;
   font-size: 12px;
@@ -1016,7 +1029,7 @@ html, body {
       </div>
 
       <!-- Refresh status -->
-      <div class="config-grid">
+      <div class="config-grid full-width">
         <div class="config-card">
           <div class="form-heading">Refresh status</div>
           <div class="two-col">
@@ -1041,7 +1054,7 @@ html, body {
       </div>
 
       <!-- Task queue -->
-      <div class="config-grid">
+      <div class="config-grid full-width">
         <div class="config-card">
           <div style="display:flex;align-items:center;justify-content:space-between">
             <div class="form-heading">Task queue</div>
@@ -1051,26 +1064,28 @@ html, body {
               <button class="btn btn-ghost" id="btn-queue-refresh">Refresh</button>
             </div>
           </div>
-          <table class="queue-table">
-            <thead>
-              <tr>
-                <th>Task ID</th>
-                <th>Status</th>
-                <th style="text-align:center">Queue pos</th>
-                <th>Created</th>
-                <th>Updated</th>
-                <th>Detail</th>
-              </tr>
-            </thead>
-            <tbody id="queue-tbody">
-              <tr class="empty-row"><td colspan="6">No tasks yet.</td></tr>
-            </tbody>
-          </table>
+          <div class="table-scroll">
+            <table class="queue-table">
+              <thead>
+                <tr>
+                  <th>Task ID</th>
+                  <th>Status</th>
+                  <th style="text-align:center">Queue pos</th>
+                  <th>Created</th>
+                  <th>Updated</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody id="queue-tbody">
+                <tr class="empty-row"><td colspan="6">No tasks yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
       <!-- Devices -->
-      <div class="config-grid">
+      <div class="config-grid full-width">
         <div class="config-card">
           <div style="display:flex;align-items:center;justify-content:space-between">
             <div class="form-heading">Bluetooth devices</div>
