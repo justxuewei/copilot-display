@@ -615,7 +615,7 @@ html, body {
 }
 
 .config-grid.full-width {
-  max-width: none;
+  max-width: 768px;
 }
 
 .config-card {
