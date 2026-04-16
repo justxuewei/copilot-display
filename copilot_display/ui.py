@@ -1073,7 +1073,7 @@ html, body {
                   <th style="text-align:center">Queue pos</th>
                   <th>Created</th>
                   <th>Updated</th>
-                  <th>Detail</th>
+                  <th>Progress</th>
                 </tr>
               </thead>
               <tbody id="queue-tbody">
@@ -1623,17 +1623,17 @@ function channelProgressHTML(t) {
   const rSent  = t.red_sent    ?? 0;
   const rTotal = t.red_total   ?? 0;
   if (!bTotal && !rTotal) return '';
-  function bar(cls, sent, total) {
+  function bar(cls, label, sent, total) {
     const pct = total > 0 ? Math.round(sent / total * 100) : 0;
     return `<div class="ch-row">
-      <span class="ch-label ${cls}">${cls}</span>
+      <span class="ch-label ${cls}">${label}</span>
       <div class="ch-bar-wrap"><div class="ch-bar ${cls}" style="width:${pct}%"></div></div>
       <span class="ch-pct">${pct}%</span>
     </div>`;
   }
   return `<div class="channel-progress">
-    ${bTotal ? bar('black', bSent, bTotal) : ''}
-    ${rTotal ? bar('red',   rSent, rTotal) : ''}
+    ${bTotal ? bar('black', 'BLK', bSent, bTotal) : ''}
+    ${rTotal ? bar('red',   'RED', rSent, rTotal) : ''}
   </div>`;
 }
 
