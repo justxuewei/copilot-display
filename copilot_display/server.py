@@ -15,7 +15,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from copilot_display import __version__, templates
@@ -226,6 +226,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="copilot-display", version=__version__, lifespan=lifespan)
+FAVICON_PATH = Path(__file__).with_name("assets") / "favicon.ico"
 
 
 @app.middleware("http")
@@ -302,6 +303,12 @@ async def push_text(req: PushTextRequest):
 async def ui_page():
     """Interactive template preview and control UI."""
     return UI_HTML
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """Serve the web UI favicon."""
+    return FileResponse(FAVICON_PATH, media_type="image/x-icon")
 
 
 @app.post("/api/preview/template")

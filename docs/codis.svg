@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <style>
+      .bg { fill: #1A1A1A; }
+      .device { fill: #F4F4F0; }
+      .screen { fill: #FAFAFA; stroke: #1A1A1A; stroke-width: 14; }
+      .ble-rune { fill: none; stroke: #1A1A1A; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; }
+      .accent { fill: #E63946; }
+      .detail { fill: #1A1A1A; }
+    </style>
+  </defs>
+  
+  <rect class="bg" width="512" height="512" rx="112" />
+  
+  <rect class="device" x="72" y="104" width="368" height="304" rx="20" />
+  
+  <rect class="screen" x="96" y="128" width="320" height="224" rx="6" />
+  
+  <path class="ble-rune" d="M 216 200 L 296 280 L 256 320 L 256 160 L 296 200 L 216 280" />
+  
+  <circle class="accent" cx="344" cy="240" r="16" />
+  
+  <circle class="detail" cx="228" cy="376" r="6" />
+  <circle class="detail" cx="256" cy="376" r="6" />
+  <circle class="detail" cx="284" cy="376" r="6" />
+</svg>
+
