@@ -6,6 +6,7 @@ UI_HTML = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>copilot-display</title>
+<link rel="icon" href="/favicon.ico" sizes="any">
 <style>
 :root {
   --bg:           #0b0b0d;

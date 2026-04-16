@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/codis.svg" alt="copilot-display icon" width="160">
+</p>
+
 # copilot-display
 
 FastAPI server that pushes text and images to a **LANCOS BluTag 4.2-inch tri-color e-ink display** (EDP-42000DDF, 400×300px, black/white/red) over BLE.

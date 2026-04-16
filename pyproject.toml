@@ -25,5 +25,4 @@ build-backend = "setuptools.build_meta"
 version = {file = "VERSION"}
 
 [tool.setuptools.package-data]
-copilot_display = ["fonts/*.ttf"]
-
+copilot_display = ["assets/*.ico", "fonts/*.ttf"]
